@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    Context, Error,
+    config::Context, Error,
     game::{ModeChoice, PosFilter},
 };
 use jplearnbot::dictionary::{NLevel};

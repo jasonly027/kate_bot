@@ -1,4 +1,4 @@
-use crate::{Context, Error};
+use crate::{config::Context, Error};
 
 /// Stops the active game, if any.
 #[poise::command(

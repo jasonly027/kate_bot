@@ -1,0 +1,12 @@
+services:
+  app:
+    image: jasonly027/kate_bot
+    environment:
+      - ENV: prod
+      - DISCORD_TOKEN_FILE: /run/secrets/kate_bot_discord_token
+    secrets:
+      - kate_bot_discord_token
+
+secrets:
+  kate_bot_discord_token:
+    external: true

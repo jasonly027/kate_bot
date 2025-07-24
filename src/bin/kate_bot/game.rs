@@ -27,7 +27,12 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{Context, dictionary::Dictionary, emote, image};
+use crate::{
+    config::Context,
+    dictionary::Dictionary,
+    emote::{self, Emote},
+    image,
+};
 
 /// Game modes
 #[derive(Debug, poise::ChoiceParameter, Clone, Copy)]
@@ -751,7 +756,7 @@ impl<'a> Menu<'a> {
                     "[**Definition ・ 意味**](https://jisho.org/search/{})\n{} {}",
                     urlencoding::encode(&self.questions[self.answer].text),
                     ci.user.name,
-                    emote::WOW.as_str()
+                    emote::emote.wow
                 );
 
                 CreateInteractionResponseMessage::new().embed(
@@ -810,34 +815,59 @@ fn parse_custom_id(custom_id: &str) -> Option<(&str, usize)> {
         })
 }
 
+lazy_static! {
+    static ref insults: [String; 28] = {
+        let Emote {
+            wow: _wow,
+            fubu_laugh,
+            scrajj,
+            anw,
+            wat,
+            maji,
+            ee,
+            baaka,
+            manuke,
+            wawawa,
+            hehe,
+            hayaku,
+            goofyahh,
+        } = *emote::emote;
+
+        [
+            format!("{wat} noob"),
+            format!("{wat} nuh-uh"),
+            format!("{wat} what is he cooking"),
+            format!("{wat} refund nitro"),
+            format!("{wat} trolling are we?"),
+            format!("{wat} nt bro"),
+            format!("{wat} smooth brain"),
+            format!("{wat} stop"),
+            format!("{wat} ?"),
+            format!("{wat} so bad"),
+            format!("{wat} meow"),
+            format!("{wat} imagine"),
+            format!("{wat} no"),
+            format!("{wat} wrong"),
+            format!("{wat} ぴえん"),
+            format!("{wat} あほ"),
+            wat.to_string(),
+            fubu_laugh.to_string(),
+            scrajj.to_string(),
+            anw.to_string(),
+            format!("{maji} マ？"),
+            format!("{ee} え？"),
+            format!("{baaka} ばーか！"),
+            format!("{manuke} アンタがまぬけ？"),
+            format!("{wawawa} How?"),
+            format!("{hehe} あほ！"),
+            format!("{hayaku} 早く！"),
+            format!("{}{}{}", goofyahh, goofyahh, goofyahh),
+        ]
+    };
+}
+
 /// Creates a randomized insult message that mentions `user_id`.
 fn insult_message(user_id: UserId, choice: &str) -> String {
-    lazy_static! {
-        static ref insults: [String; 20] = [
-            format!("{} noob", emote::WAT.as_str()),
-            format!("{} nuh-uh", emote::WAT.as_str()),
-            format!("{} what is he cooking", emote::WAT.as_str()),
-            format!("{} refund nitro", emote::WAT.as_str()),
-            format!("{} trolling are we?", emote::WAT.as_str()),
-            format!("{} nt bro", emote::WAT.as_str()),
-            format!("{} smooth brain", emote::WAT.as_str()),
-            format!("{} stop", emote::WAT.as_str()),
-            format!("{} ?", emote::WAT.as_str()),
-            format!("{} so bad", emote::WAT.as_str()),
-            format!("{} meow", emote::WAT.as_str()),
-            format!("{} imagine", emote::WAT.as_str()),
-            format!("{} no", emote::WAT.as_str()),
-            format!("{} wrong", emote::WAT.as_str()),
-            format!("{} ぴえん", emote::WAT.as_str()),
-            format!("{} あほ", emote::WAT.as_str()),
-            emote::WAT.to_string(),
-            emote::FUBU_LAUGH.to_string(),
-            emote::SCRAJJ.to_string(),
-            emote::ANW.to_string(),
-        ];
-    }
-
     let insult = insults.choose(&mut rng()).unwrap();
-
     format!("{insult} <@{user_id}> ({choice})")
 }

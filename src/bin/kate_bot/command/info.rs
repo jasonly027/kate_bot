@@ -1,6 +1,6 @@
 use poise::{CreateReply, serenity_prelude::CreateEmbed};
 
-use crate::{Context, Error};
+use crate::{config::Context, Error};
 
 /// Information about the bot.
 #[poise::command(
