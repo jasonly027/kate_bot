@@ -1,10 +1,8 @@
 use std::{fs, process, sync::Arc};
 
 use poise::{
-    Framework, FrameworkOptions,
-    serenity_prelude::{
-        self as serenity, Context as SerenityContext, GuildId, Ready, futures::future::BoxFuture,
-    },
+    BoxFuture, Framework, FrameworkOptions,
+    serenity_prelude::{self as serenity, Context as SerenityContext, GuildId, Ready},
 };
 use strum_macros::{Display, EnumString};
 
@@ -68,23 +66,23 @@ pub fn framework_options() -> FrameworkOptions<Data, Error> {
     poise::FrameworkOptions {
         commands: vec![command::start(), command::stop(), command::info()],
         event_handler: |_ctx, event, framework, _data| {
-            Box::pin(event_handler(event.clone(), framework))
+            Box::pin(async move {
+                if let serenity::FullEvent::InteractionCreate { interaction } = event {
+                    if let Some(interaction) = interaction.clone().into_message_component() {
+                        framework.user_data.manager.send(interaction).await;
+                    };
+                };
+
+                Ok(())
+            })
+        },
+        on_error: |error| {
+            Box::pin(async move {
+                eprintln!("[{}] {error}", chrono::Utc::now());
+            })
         },
         ..Default::default()
     }
-}
-
-async fn event_handler(
-    event: serenity::FullEvent,
-    framework: poise::FrameworkContext<'_, Data, Error>,
-) -> Result<(), Error> {
-    if let serenity::FullEvent::InteractionCreate { interaction } = event {
-        if let Some(interaction) = interaction.into_message_component() {
-            framework.user_data.manager.send(interaction).await;
-        };
-    };
-
-    Ok(())
 }
 
 pub fn framework_setup<'a>(

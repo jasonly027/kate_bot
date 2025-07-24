@@ -12,6 +12,7 @@ name = "kate_bot"
 path = "src/bin/kate_bot/main.rs"
 
 [dependencies]
+chrono = "0.4.41"
 clap = { version = "4.5.35", features = ["derive"] }
 const_format = { version = "0.2.34", features = ["fmt"] }
 dashmap = "6.1.0"

@@ -343,8 +343,10 @@ checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1232,6 +1234,7 @@ checksum = "f5d4a7da358eff58addd2877a45865158f0d78c911d43a5784ceb7bbf52833b0"
 name = "jplearnbot"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "const_format",
  "dashmap 6.1.0",
