@@ -14,24 +14,20 @@ pub struct Dictionary {
 
 impl Default for Dictionary {
     fn default() -> Self {
-        let mut dict = Dictionary {
-            entries: Vec::new(),
-        };
-
         static DICT_FILE: &[u8] = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/content/dictionary.jsonl"
         ));
 
-        // Deserialize entries and append
-        for line in Cursor::new(DICT_FILE).lines() {
-            let entry: DictEntry = serde_json::from_str(&line.expect("failed to read line"))
-                .expect("failed to deserialize entry");
+        let entries = Cursor::new(DICT_FILE)
+            .lines()
+            .map(|line| {
+                let entry = serde_json::from_str::<DictEntry>(&line.unwrap()).unwrap();
+                Arc::new(entry)
+            })
+            .collect();
 
-            dict.entries.push(entry.into());
-        }
-
-        dict
+        Dictionary { entries }
     }
 }
 
@@ -42,19 +38,18 @@ impl Dictionary {
 
     /// Creates a randomized subset of the entries based on the parameter filters.
     pub async fn sample(&self, levels: &[NLevel], pos: &[Pos]) -> Vec<Arc<DictEntry>> {
-        let mut sample = Vec::new();
-
-        for entry in &self.entries {
-            // Add only if at least one matching NLevel or part of speech.
-            if entry.levels().iter().any(|lvl| levels.contains(lvl))
-                && entry
-                    .senses
-                    .iter()
-                    .any(|sense| sense.pos.iter().any(|p| pos.contains(p)))
-            {
-                sample.push(entry.clone());
-            }
-        }
+        let mut sample: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.levels().iter().any(|lvl| levels.contains(lvl))
+                    && entry
+                        .senses
+                        .iter()
+                        .any(|s| s.pos.iter().any(|p| pos.contains(p)))
+            })
+            .cloned()
+            .collect();
         sample.shuffle(&mut rand::rng());
 
         sample

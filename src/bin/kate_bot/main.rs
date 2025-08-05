@@ -15,6 +15,8 @@ mod image;
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     dotenv().ok();
 
     println!(

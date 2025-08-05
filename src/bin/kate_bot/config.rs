@@ -1,10 +1,14 @@
-use std::{fs, process, sync::Arc};
+use std::{
+    env, fs, process,
+    sync::{Arc, LazyLock},
+};
 
 use poise::{
     BoxFuture, Framework, FrameworkOptions,
     serenity_prelude::{self as serenity, Context as SerenityContext, GuildId, Ready},
 };
 use strum_macros::{Display, EnumString};
+use tracing::{error, info, warn};
 
 use crate::{command, game};
 
@@ -14,7 +18,7 @@ pub struct Data {
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
-#[derive(EnumString, Display)]
+#[derive(EnumString, Display, Clone, Copy)]
 pub enum Env {
     #[strum(serialize = "dev")]
     Dev,
@@ -22,49 +26,85 @@ pub enum Env {
     Prod,
 }
 
-/// Prints missing `var` environment variable to stderr and terminates
-/// with an exit code of 1.
-fn report_missing_and_exit(var: &str) -> ! {
-    eprintln!("Missing `{var}` environment variable.");
-    process::exit(1)
-}
-
-pub fn environment() -> Env {
-    let Ok(env) = std::env::var("ENV") else {
-        report_missing_and_exit("ENV")
-    };
-    env.parse()
-        .expect("Invalid value for ENV environment variable.")
-}
-
-/// Gets the Discord bot token from DISCORD_TOKEN or DISCORD_TOKEN_FILE env.
+/// Gets the environment from ENV env.
 ///
-/// # Process Termination
-/// Terminates the program if either environment variable is missing.
-pub fn discord_token() -> String {
-    match environment() {
-        Env::Dev => std::env::var("DISCORD_TOKEN")
-            .unwrap_or_else(|_| report_missing_and_exit("DISCORD_TOKEN")),
-        Env::Prod => std::env::var("DISCORD_TOKEN_FILE")
-            .ok()
-            .and_then(|path| fs::read_to_string(path).ok())
-            .unwrap_or_else(|| report_missing_and_exit("DISCORD_TOKEN_FILE")),
-    }
+/// # Terminates
+/// Terminates if variable is not set.
+pub fn environment() -> Env {
+    static ENV: LazyLock<Env> = LazyLock::new(|| {
+        let Ok(env) = env::var("ENV") else {
+            error!("ENV environment variable not set");
+            process::exit(1);
+        };
+
+        env.parse().unwrap_or_else(|_| {
+            error!(
+                msg = "Invalid value for ENV environment variable",
+                value = env
+            );
+            process::exit(1);
+        })
+    });
+
+    *ENV
 }
 
-/// Gets the Discord development GuildId from `DISCORD_DEV_GUILD_ID` env. Returns
-/// None if not set.
+/// Gets the Discord bot token from DISCORD_TOKEN or DISCORD_TOKEN_FILE depending on [`Env`].
+///
+/// # Termination
+/// Terminates if neither variable is set or the file at DISCORD_TOKEN_FILE couldn't be read.
+pub fn discord_token() -> &'static str {
+    static TOKEN: LazyLock<String> = LazyLock::new(|| match environment() {
+        Env::Dev => env::var("DISCORD_TOKEN").unwrap_or_else(|_| {
+            error!("DISCORD_TOKEN environment variable not set");
+            process::exit(1);
+        }),
+        Env::Prod => {
+            let file = env::var("DISCORD_TOKEN_FILE").unwrap_or_else(|_| {
+                error!("DISCORD_TOKEN_FILE environment variable not set");
+                process::exit(1);
+            });
+
+            fs::read_to_string(&file)
+                .unwrap_or_else(|err| {
+                    error!(message = "Failed to read from DISCORD_TOKEN_FILE", error = %err);
+                    process::exit(1);
+                })
+                .trim()
+                .to_string()
+        }
+    });
+
+    &TOKEN
+}
+
+/// Gets the Discord development GuildId from DISCORD_DEV_GUILD_ID env.
+///
+/// # Terminates
+/// Terminates if variable is not set.
 pub fn discord_dev_guild_id() -> u64 {
-    let Ok(id) = std::env::var("DISCORD_DEV_GUILD_ID") else {
-        report_missing_and_exit("DISCORD_DEV_GUILD_ID")
-    };
-    id.parse()
-        .expect("Invalid value for DISCORD_DEV_GUILD_ID environment variable.")
+    static ID: LazyLock<u64> = LazyLock::new(|| {
+        let Ok(id) = env::var("DISCORD_DEV_GUILD_ID") else {
+            error!("DISCORD_DEV_GUILD_ID environment variable not set");
+            process::exit(1);
+        };
+
+        id.parse().unwrap_or_else(|_| {
+            error!(
+                msg = "Invalid value for DISCORD_DEV_GUILD_ID environment variable",
+                value = id
+            );
+            process::exit(1);
+        })
+    });
+
+    *ID
 }
 
 pub fn framework_options() -> FrameworkOptions<Data, Error> {
     poise::FrameworkOptions {
         commands: vec![command::start(), command::stop(), command::info()],
+
         event_handler: |_ctx, event, framework, _data| {
             Box::pin(async move {
                 if let serenity::FullEvent::InteractionCreate { interaction } = event {
@@ -76,11 +116,13 @@ pub fn framework_options() -> FrameworkOptions<Data, Error> {
                 Ok(())
             })
         },
+
         on_error: |error| {
             Box::pin(async move {
-                eprintln!("[{}] {error}", chrono::Utc::now());
+                warn!(%error);
             })
         },
+
         ..Default::default()
     }
 }
@@ -93,7 +135,7 @@ pub fn framework_setup<'a>(
     Box::pin(async move {
         match environment() {
             Env::Dev => {
-                println!("Registering commands to DEV Guild");
+                info!("Registering commands to development guild");
                 poise::builtins::register_in_guild(
                     ctx,
                     &framework.options().commands,
@@ -102,13 +144,13 @@ pub fn framework_setup<'a>(
                 .await?;
             }
             Env::Prod => {
-                println!("Registering commands globally");
+                info!("Registering commands globally");
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
             }
         }
 
         Ok(Data {
-            manager: game::Manager::new(ctx.http.clone()).into(),
+            manager: Arc::new(game::Manager::new(ctx.http.clone())),
         })
     })
 }
