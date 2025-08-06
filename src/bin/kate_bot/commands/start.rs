@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use crate::{
-    config::Context, Error,
-    game::{ModeChoice, PosFilter},
+    config::KateContext, modes::{self, multi_choice::PosFilter, ModeChoice}, KateError
 };
-use jplearnbot::dictionary::{NLevel};
+use jplearnbot::dictionary::NLevel;
 use poise::serenity_prelude::{
     ComponentInteractionCollector, ComponentInteractionDataKind, CreateActionRow, CreateButton,
     CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
@@ -16,16 +15,26 @@ use strum::IntoEnumIterator;
 #[poise::command(
     slash_command,
     user_cooldown = 3,
+    guild_cooldown = 3,
     name_localized("ja", "スタート"),
     description_localized("ja", "ゲームを始める")
 )]
 pub async fn start(
-    ctx: Context<'_>,
+    ctx: KateContext<'_>,
     #[name_localized("ja", "モード")]
     #[description = "Pick a game mode"]
     #[description_localized("ja", "ゲームのモードを選んでください")]
     mode: ModeChoice,
-) -> Result<(), Error> {
+) -> Result<(), KateError> {
+    // match mode {
+    //     ModeChoice::EngToHir
+    //     | ModeChoice::HirToEng
+    //     | ModeChoice::HirToKan
+    //     | ModeChoice::KanToHir
+    //     | ModeChoice::KanToEng
+    //     | ModeChoice::EngToKan => modes::multi_choice::handle(ctx).await?,
+    // }
+
     let mut menu = FiltersMenu::new(&ctx, ctx.id(), mode);
 
     ctx.send(
@@ -42,7 +51,7 @@ pub async fn start(
 
 /// Manages the components of the create game form.
 struct FiltersMenu<'a> {
-    ctx: &'a Context<'a>,
+    ctx: &'a KateContext<'a>,
     /// Identifier for the NLevel filter menu.
     nlvls_id: String,
     /// Currently selected NLevels. Initially all of them.
@@ -61,7 +70,7 @@ struct FiltersMenu<'a> {
 }
 
 impl<'a> FiltersMenu<'a> {
-    fn new(ctx: &'a Context<'_>, invocation_id: u64, mode: ModeChoice) -> Self {
+    fn new(ctx: &'a KateContext<'_>, invocation_id: u64, mode: ModeChoice) -> Self {
         let id = invocation_id.to_string();
         FiltersMenu {
             ctx,
@@ -133,7 +142,7 @@ impl<'a> FiltersMenu<'a> {
 
     /// Listens for form interactions. Starts a game on submission. Does nothing
     /// on subsequent submissions.
-    async fn handle_interactions(&mut self) -> Result<(), Error> {
+    async fn handle_interactions(&mut self) -> Result<(), KateError> {
         let mut submitted = false;
 
         let mut collector = ComponentInteractionCollector::new(self.ctx)
@@ -210,9 +219,8 @@ impl<'a> FiltersMenu<'a> {
                     {
                         ci.edit_response(
                             self.ctx,
-                            EditInteractionResponse::new().content(
-                                "Active game in progress. Please stop it.",
-                            ),
+                            EditInteractionResponse::new()
+                                .content("Active game in progress. Please stop it."),
                         )
                         .await?;
                     } else {

@@ -10,13 +10,14 @@ use poise::{
 use strum_macros::{Display, EnumString};
 use tracing::{error, info, warn};
 
-use crate::{command, game};
+use crate::{commands, models::manager::Manager, modes::multi_choice};
 
-pub struct Data {
-    pub manager: Arc<game::Manager>,
+#[derive(Debug)]
+pub struct KateData {
+    pub manager: Arc<Manager>,
 }
-pub type Context<'a> = poise::Context<'a, Data, Error>;
-pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type KateContext<'a> = poise::Context<'a, KateData, KateError>;
+pub type KateError = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(EnumString, Display, Clone, Copy)]
 pub enum Env {
@@ -38,10 +39,7 @@ pub fn environment() -> Env {
         };
 
         env.parse().unwrap_or_else(|_| {
-            error!(
-                msg = "Invalid value for ENV environment variable",
-                value = env
-            );
+            error!("Invalid value \"{}\" for ENV environment variable", env);
             process::exit(1);
         })
     });
@@ -91,8 +89,8 @@ pub fn discord_dev_guild_id() -> u64 {
 
         id.parse().unwrap_or_else(|_| {
             error!(
-                msg = "Invalid value for DISCORD_DEV_GUILD_ID environment variable",
-                value = id
+                "Invalid value \"{}\" for DISCORD_DEV_GUILD_ID environment variable",
+                id
             );
             process::exit(1);
         })
@@ -101,9 +99,9 @@ pub fn discord_dev_guild_id() -> u64 {
     *ID
 }
 
-pub fn framework_options() -> FrameworkOptions<Data, Error> {
+pub fn framework_options() -> FrameworkOptions<KateData, KateError> {
     poise::FrameworkOptions {
-        commands: vec![command::start(), command::stop(), command::info()],
+        commands: vec![commands::start(), commands::stop(), commands::info()],
 
         event_handler: |_ctx, event, framework, _data| {
             Box::pin(async move {
@@ -130,8 +128,8 @@ pub fn framework_options() -> FrameworkOptions<Data, Error> {
 pub fn framework_setup<'a>(
     ctx: &'a SerenityContext,
     _ready: &'a Ready,
-    framework: &'a Framework<Data, Error>,
-) -> BoxFuture<'a, Result<Data, Error>> {
+    framework: &'a Framework<KateData, KateError>,
+) -> BoxFuture<'a, Result<KateData, KateError>> {
     Box::pin(async move {
         match environment() {
             Env::Dev => {
@@ -149,8 +147,8 @@ pub fn framework_setup<'a>(
             }
         }
 
-        Ok(Data {
-            manager: Arc::new(game::Manager::new(ctx.http.clone())),
+        Ok(KateData {
+            manager: Arc::new(Manager::new(ctx.http.clone())),
         })
     })
 }

@@ -1,7 +1,39 @@
-use std::{io::Cursor, sync::LazyLock};
-
 use image::{ImageBuffer, Luma};
 use rusttype::{Font, Scale, point};
+use std::{
+    fmt::{Debug, Display},
+    process,
+    str::FromStr,
+};
+use std::{io::Cursor, sync::LazyLock};
+use tracing::{error, warn};
+
+pub trait ParseUnwrapAll<T> {
+    fn parse_unwrap_all(self) -> Vec<T>;
+}
+
+impl<I, T> ParseUnwrapAll<T> for I
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+    T: FromStr,
+    T::Err: Debug,
+{
+    fn parse_unwrap_all(self) -> Vec<T> {
+        self.into_iter()
+            .map(|value| {
+                value.as_ref().parse().unwrap_or_else(|err| {
+                    error!(message = "Failed to parse value", value = value.as_ref(), error = ?err);
+                    process::exit(2)
+                })
+            })
+            .collect()
+    }
+}
+
+pub fn log_sending_error<E: Display>(err: &E) {
+    warn!(message = "Send failed", error = %err);
+}
 
 /// Converts `text` into a rasterized PNG image in bytes.
 pub fn text_to_image(text: &str) -> Vec<u8> {

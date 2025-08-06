@@ -7,6 +7,7 @@ use jplearnbot::dictionary::{DictEntry, NLevel, Pos};
 use rand::seq::SliceRandom;
 
 /// Contains [`DictEntry`]'s.
+#[derive(Debug)]
 pub struct Dictionary {
     /// Contains all of the entries.
     pub entries: Vec<Arc<DictEntry>>,

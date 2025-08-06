@@ -1,18 +1,15 @@
-use std::{
-    fmt::Display,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{fmt::Display, process, sync::LazyLock, time::Duration};
 
-use dashmap::DashMap;
 use jplearnbot::dictionary::{DictEntry, Kanji, NLevel, Pos, Reading, Sense};
 use lazy_static::lazy_static;
 use poise::{
-    ChoiceParameter,
+    ChoiceParameter, CreateReply,
     serenity_prelude::{
-        ComponentInteraction, CreateActionRow, CreateAttachment, CreateButton, CreateEmbed,
-        CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, EditMessage,
-        UserId, http::Http,
+        ComponentInteraction, ComponentInteractionCollector,
+        ComponentInteractionDataKind as EventKind, CreateActionRow, CreateAttachment, CreateButton,
+        CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
+        CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+        EditMessage, UserId, http::Http,
     },
 };
 use rand::{
@@ -20,36 +17,20 @@ use rand::{
     seq::{IndexedRandom, IteratorRandom, SliceRandom},
 };
 use regex::Regex;
+use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumString};
-use tokio::{
-    sync::mpsc::{self, Receiver, Sender},
-    time::timeout,
-};
-use uuid::Uuid;
+use tokio::{sync::mpsc::Receiver, time::timeout};
+use tracing::{error, instrument};
 
 use crate::{
-    config::Context,
-    dictionary::Dictionary,
-    emote::{self, Emote},
-    image,
+    config::{KateContext, KateError},
+    models::{
+        dictionary::Dictionary,
+        emote::{self, Emote},
+    },
+    modes::ModeChoice,
+    util::{self, ParseUnwrapAll, log_sending_error},
 };
-
-/// Game modes
-#[derive(Debug, poise::ChoiceParameter, Clone, Copy)]
-pub enum ModeChoice {
-    #[name = "English ▶ ひらがな"]
-    EngToHir,
-    #[name = "ひらがな ▶ English"]
-    HirToEng,
-    #[name = "ひらがな ▶ 漢字"]
-    HirToKan,
-    #[name = "漢字 ▶ ひらがな"]
-    KanToHir,
-    #[name = "漢字 ▶ English"]
-    KanToEng,
-    #[name = "English ▶ 漢字"]
-    EngToKan,
-}
 
 pub enum GameMessage {
     /// A component interaction.
@@ -74,7 +55,7 @@ pub enum PosFilter {
 }
 
 impl PosFilter {
-    const fn as_pos(&self) -> &'static [Pos] {
+    pub const fn as_pos(&self) -> &'static [Pos] {
         const NOUNS: [Pos; 7] = [
             Pos::N,
             Pos::NPr,
@@ -187,159 +168,8 @@ impl PosFilter {
     }
 }
 
-/// Manages all game sessions.
-pub struct Manager {
-    /// Handle to serenity client.
-    http: Arc<Http>,
-    /// Dictionary for getting randomized samples and entries.
-    dictionary: Arc<Dictionary>,
-    /// Stores transmitters to game sessions. A Server/DM may only have
-    /// one active game session.
-    sessions: Arc<DashMap<u64, Sender<GameMessage>>>,
-}
-
-impl Manager {
-    pub fn new(http: Arc<Http>) -> Self {
-        Manager {
-            http,
-            dictionary: Dictionary::new().into(),
-            sessions: DashMap::new().into(),
-        }
-    }
-
-    /// Starts a new game session with the selected `mode`, `levels`, and `pos`.
-    /// A separate task is created for game interaction handling. A [`Sender`]
-    /// to the session is stored in [`Self::sessions`] for the duration of the game.
-    /// The sessions exists while there are words in the pool and user interaction
-    /// doesn't timeout from inactivity. A session can be stopped prematurely by sending
-    /// a [`GameMessage::Close`] through the sender.
-    ///
-    /// # Errors
-    /// Fails if user already has an active game.
-    pub fn start_game(
-        &self,
-        ctx: &Context<'_>,
-        mode: ModeChoice,
-        levels: Vec<NLevel>,
-        filters: Vec<PosFilter>,
-    ) -> Result<(), SessionAlreadyCreated> {
-        let session_id = ctx
-            .guild_id()
-            .map(|g| g.get())
-            .unwrap_or(ctx.author().id.get());
-
-        if self.sessions.contains_key(&session_id) {
-            return Err(SessionAlreadyCreated);
-        }
-
-        let channel_id = ctx.channel_id();
-
-        let http = Arc::clone(&self.http);
-        let sessions = Arc::clone(&self.sessions);
-        let dictionary = Arc::clone(&self.dictionary);
-
-        let mut pos = pos_filters_to_pos(filters);
-
-        let (tx, mut rx) = mpsc::channel(10);
-        self.sessions.insert(session_id, tx);
-
-        tokio::spawn(async move {
-            // Natural expected exit reason, reason may change from interactions or lack thereof.
-            let mut exit_reason = InteractionExitReason::PoolExhausted;
-
-            for (round, entry) in dictionary.sample(&levels, &pos).await.iter().enumerate() {
-                pos.shuffle(&mut rng());
-                let Some(question) = pos
-                    .iter()
-                    .find_map(|&p| Question::new(entry, mode, p, &dictionary))
-                else {
-                    continue;
-                };
-
-                let menu_id = format!("{session_id},{}", Uuid::new_v4());
-                let mut menu = Menu::new(&http, menu_id, question, entry);
-
-                if channel_id
-                    .send_files(
-                        &http,
-                        menu.create_files(),
-                        menu.create_message(round + 1, mode),
-                    )
-                    .await
-                    .is_err()
-                {
-                    exit_reason = InteractionExitReason::NetworkError;
-                    break;
-                }
-
-                if let Err(reason) = menu.handle_interactions(&mut rx).await {
-                    exit_reason = reason;
-                    break;
-                }
-            }
-
-            let message = match exit_reason {
-                InteractionExitReason::PoolExhausted => {
-                    Some("There are no more words left in the pool")
-                }
-                InteractionExitReason::Timeout => Some("Stopping game due to inactivity..."),
-                InteractionExitReason::NetworkError => {
-                    Some("Stopping game due to network error...")
-                }
-                InteractionExitReason::CloseRequest => None,
-            };
-
-            if let Some(message) = message {
-                channel_id
-                    .send_message(&http, CreateMessage::new().content(message))
-                    .await
-                    .ok();
-            }
-
-            sessions.remove(&session_id);
-        });
-
-        Ok(())
-    }
-
-    /// Stops `session_id`'s game if it exists.
-    ///
-    /// Returns true if there was an active game stopped.
-    ///
-    /// Returns false if there was no game associated with the `session_id`.
-    pub async fn stop(&self, session_id: u64) -> bool {
-        if let Some(tx) = self.sessions.get(&session_id) {
-            tx.send(GameMessage::Close).await.ok();
-            return true;
-        }
-
-        false
-    }
-
-    /// Sends `interaction` to the game session compatible with the interaction's custom_id.
-    /// Does nothing if no matching game sesssion.
-    pub async fn send(&self, interaction: ComponentInteraction) {
-        if let Some(tx) =
-            parse_session_id(&interaction.data.custom_id).and_then(|id| self.sessions.get(&id))
-        {
-            tx.send(GameMessage::Interaction(interaction)).await.ok();
-        }
-    }
-}
-
-/// Converts [`PosFilter`]'s to [`Pos`] using [`PosFilter::as_pos`].
-fn pos_filters_to_pos(filters: Vec<PosFilter>) -> Vec<Pos> {
-    let mut res = Vec::new();
-
-    for filter in filters {
-        res.extend_from_slice(filter.as_pos());
-    }
-
-    res
-}
-
 /// Reasons listening for component interactions should stop.
-enum InteractionExitReason {
+pub enum InteractionExitReason {
     /// There are no more words left in the pool.
     PoolExhausted,
     /// Sender took too long to send a message.
@@ -348,15 +178,6 @@ enum InteractionExitReason {
     NetworkError,
     /// Game should close.
     CloseRequest,
-}
-
-/// Extracts game session_id from interaction's custom_id.
-fn parse_session_id(interaction_id: &str) -> Option<u64> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+").unwrap());
-
-    let session_id = RE.find(interaction_id)?.as_str().parse().ok()?;
-
-    Some(session_id)
 }
 
 #[derive(Debug)]
@@ -371,7 +192,7 @@ impl Display for SessionAlreadyCreated {
 impl std::error::Error for SessionAlreadyCreated {}
 
 /// Game question
-struct Question {
+pub struct Question {
     /// The word to translate.
     prompt: String,
     /// Possible translations of [`Self::prompt`].
@@ -381,7 +202,12 @@ struct Question {
 }
 
 impl Question {
-    fn new(entry: &DictEntry, mode: ModeChoice, pos: Pos, dictionary: &Dictionary) -> Option<Self> {
+    pub fn new(
+        entry: &DictEntry,
+        mode: ModeChoice,
+        pos: Pos,
+        dictionary: &Dictionary,
+    ) -> Option<Self> {
         match mode {
             ModeChoice::EngToHir => Self::new_eng_to_hir(entry, pos, dictionary),
             ModeChoice::HirToEng => Self::new_hir_to_eng(entry, pos, dictionary),
@@ -624,7 +450,7 @@ fn kanji_sense_pair(entry: &DictEntry, pos: Pos) -> Option<(&Kanji, &Sense)> {
 }
 
 /// Manages the components of a game question.
-struct Menu<'a> {
+pub struct Menu<'a> {
     id: String,
     prompt: String,
     questions: Vec<QuestionComponent>,
@@ -644,7 +470,7 @@ struct QuestionComponent {
 }
 
 impl<'a> Menu<'a> {
-    fn new(http: &'a Http, id: String, question: Question, entry: &'a DictEntry) -> Self {
+    pub fn new(http: &'a Http, id: String, question: Question, entry: &'a DictEntry) -> Self {
         let questions = question
             .options
             .into_iter()
@@ -686,14 +512,14 @@ impl<'a> Menu<'a> {
         &self.questions[self.answer].id
     }
 
-    fn create_files(&self) -> Vec<CreateAttachment> {
+    pub fn create_files(&self) -> Vec<CreateAttachment> {
         vec![CreateAttachment::bytes(
-            image::text_to_image(&self.prompt),
+            util::text_to_image(&self.prompt),
             "prompt.png",
         )]
     }
 
-    fn create_message(&self, round: usize, mode: ModeChoice) -> CreateMessage {
+    pub fn create_message(&self, round: usize, mode: ModeChoice) -> CreateMessage {
         CreateMessage::new()
             .embed(
                 CreateEmbed::new()
@@ -716,7 +542,7 @@ impl<'a> Menu<'a> {
     }
 
     /// Listens for button interactions until the answer is chosen.
-    async fn handle_interactions(
+    pub async fn handle_interactions(
         &mut self,
         rx: &mut Receiver<GameMessage>,
     ) -> Result<(), InteractionExitReason> {
@@ -870,4 +696,203 @@ lazy_static! {
 fn insult_message(user_id: UserId, choice: &str) -> String {
     let insult = insults.choose(&mut rng()).unwrap();
     format!("{insult} <@{user_id}> ({choice})")
+}
+
+struct Service {
+    id: String,
+    id_levels_dropdown: String,
+    id_pos_dropdown: String,
+    id_submit_button: String,
+    levels: Vec<NLevel>,
+    pos_filters: Vec<PosFilter>,
+}
+
+enum SubmitError {
+    GameInProgress,
+}
+
+enum RoutingResult {
+    Continue,
+    Exit,
+}
+
+impl Service {
+    fn new(id: u64) -> Self {
+        // When adding new ids, remember to append it to Self::ids().
+        Self {
+            id: id.to_string(),
+            id_levels_dropdown: format!("{id}-lvldrpdwn"),
+            id_pos_dropdown: format!("{id}-psdrpdwn"),
+            id_submit_button: format!("{id}-sbmt"),
+            levels: NLevel::iter().collect(),
+            pos_filters: PosFilter::iter().collect(),
+        }
+    }
+
+    fn ids(&self) -> [String; 4] {
+        [
+            self.id.clone(),
+            self.id_levels_dropdown.clone(),
+            self.id_pos_dropdown.clone(),
+            self.id_submit_button.clone(),
+        ]
+    }
+
+    fn create_first_reply(&self) -> CreateReply {
+        CreateReply::default()
+            .components(vec![
+                self.create_levels_dropdown(),
+                self.create_pos_dropdown(),
+                self.create_submit_button(),
+            ])
+            .ephemeral(true)
+    }
+
+    fn create_levels_dropdown(&self) -> CreateActionRow {
+        let options: Vec<_> = NLevel::iter()
+            .map(|level| {
+                let level = level.to_string();
+                CreateSelectMenuOption::new(&level, &level).default_selection(true)
+            })
+            .collect();
+        let len = options.len();
+
+        let menu = CreateSelectMenu::new(
+            &self.id_levels_dropdown,
+            CreateSelectMenuKind::String { options },
+        )
+        .placeholder("Select NLevel Pool(s)")
+        .min_values(1)
+        .max_values(len.try_into().unwrap_or_else(|err| {
+            error!(message = "Max select value of Levels Dropdown is too high", len, error = %err);
+            process::exit(2)
+        }));
+
+        CreateActionRow::SelectMenu(menu)
+    }
+
+    fn create_pos_dropdown(&self) -> CreateActionRow {
+        let options: Vec<_> = PosFilter::iter()
+            .map(|pos| {
+                let pos = pos.to_string();
+                CreateSelectMenuOption::new(&pos, &pos).default_selection(true)
+            })
+            .collect();
+        let len = options.len();
+
+        let menu = CreateSelectMenu::new(
+            &self.id_pos_dropdown,
+            CreateSelectMenuKind::String { options },
+        )
+        .placeholder("Select parts-of-speech filters")
+        .min_values(1)
+        .max_values(len.try_into().unwrap_or_else(|err| {
+            error!(message = "Max select value of Pos Dropdown is too high", len, error = %err);
+            process::exit(2)
+        }));
+
+        CreateActionRow::SelectMenu(menu)
+    }
+
+    fn create_submit_button(&self) -> CreateActionRow {
+        let button = CreateButton::new(&self.id_submit_button).label("Create Game");
+        CreateActionRow::Buttons(vec![button])
+    }
+
+    fn set_levels(&mut self, levels: Vec<NLevel>) {
+        self.levels = levels;
+    }
+
+    fn set_pos(&mut self, filters: Vec<PosFilter>) {
+        self.pos_filters = filters;
+    }
+
+    fn submit(&mut self, ctx: &KateContext<'_>) -> Result<(), SubmitError> {
+        todo!()
+    }
+}
+
+#[instrument]
+pub async fn handle(ctx: KateContext<'_>) -> Result<(), KateError> {
+    let mut service = Service::new(ctx.id());
+
+    ctx.send(service.create_first_reply())
+        .await
+        .inspect_err(log_sending_error)?;
+
+    while let Some(ev) = event_listener(&ctx, &service).await {
+        match event_router(&ctx, &mut service, ev).await {
+            Ok(RoutingResult::Continue) => {}
+            Ok(RoutingResult::Exit) => break,
+            Err(err) => log_sending_error(&err),
+        }
+    }
+
+    Ok(())
+}
+
+fn event_listener(ctx: &KateContext<'_>, service: &Service) -> ComponentInteractionCollector {
+    ComponentInteractionCollector::new(ctx)
+        .author_id(ctx.author().id)
+        .channel_id(ctx.channel_id())
+        .timeout(Duration::from_secs(60))
+        .filter({
+            let relevant_ids = service.ids();
+            move |ev| relevant_ids.contains(&ev.data.custom_id)
+        })
+}
+
+async fn event_router(
+    ctx: &KateContext<'_>,
+    service: &mut Service,
+    ev: ComponentInteraction,
+) -> Result<RoutingResult, KateError> {
+    let id = &ev.data.custom_id;
+    let kind = &ev.data.kind;
+
+    match kind {
+        EventKind::StringSelect { values } if *id == service.id_levels_dropdown => {
+            service.set_levels(values.parse_unwrap_all());
+            ev.create_response(ctx, CreateInteractionResponse::Acknowledge)
+                .await?;
+        }
+
+        EventKind::StringSelect { values } if *id == service.id_pos_dropdown => {
+            service.set_pos(values.parse_unwrap_all());
+            ev.create_response(ctx, CreateInteractionResponse::Acknowledge)
+                .await?;
+        }
+
+        EventKind::Button if *id == service.id_submit_button => {
+            let msg = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("Creating game...")
+                    .ephemeral(true),
+            );
+            ev.create_response(ctx, msg).await?;
+
+            match service.submit(ctx) {
+                Ok(()) => {
+                    ev.delete_response(ctx)
+                        .await
+                        .inspect_err(log_sending_error)
+                        .ok();
+                    return Ok(RoutingResult::Exit);
+                }
+
+                Err(SubmitError::GameInProgress) => {
+                    ev.edit_response(
+                        ctx,
+                        EditInteractionResponse::new()
+                            .content("Active game in progress. Please stop it."),
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        _ => {}
+    }
+
+    Ok(RoutingResult::Continue)
 }
