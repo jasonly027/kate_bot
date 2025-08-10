@@ -1,3 +1,5 @@
+//! This module contains utilities usable in various contexts.
+
 use image::{ImageBuffer, Luma};
 use poise::serenity_prelude::{ComponentInteraction, GuildId};
 use rusttype::{Font, Scale, point};
@@ -8,7 +10,16 @@ use tracing::{error, warn};
 
 use crate::models::net::KateContext;
 
-pub trait ParseUnwrapAll<T> {
+pub trait ParseUnwrapAll<T>: IntoIterator
+where
+    Self::Item: AsRef<str>,
+    T: FromStr,
+    T::Err: Debug,
+{
+    /// Parses every item in `Self` and collects them.
+    ///
+    /// # Termination
+    /// Process will exit on a failing parse.
     fn parse_unwrap_all(self) -> Vec<T>;
 }
 
@@ -32,6 +43,8 @@ where
 }
 
 pub trait LobbyId {
+    /// Gets the lobby_id. If the source is from a guild, it is the guild_id,
+    /// otherwise it's the user_id.
     fn lobby_id(&self) -> u64;
 }
 
@@ -52,10 +65,12 @@ impl LobbyId for ComponentInteraction {
 }
 
 pub trait GameId {
+    /// Gets game_id which identifies which game Self is intended for.
     fn game_id(&self) -> &str;
 }
 
 impl GameId for ComponentInteraction {
+    /// Extracts the first CSV field from data.custom_id.
     fn game_id(&self) -> &str {
         self.data
             .custom_id
@@ -66,10 +81,12 @@ impl GameId for ComponentInteraction {
 }
 
 pub trait Logging {
+    /// Logs with `message` at the WARN level if Err. Returns the original Self.
     fn on_err_warn(self, message: &str) -> Self
     where
         Self: Sized;
 
+    /// Logs with "Send failed" at the WARN level if Err. Returns the original Self.
     fn on_err_warn_send_failed(self) -> Self
     where
         Self: Sized;

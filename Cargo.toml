@@ -1,5 +1,5 @@
 [package]
-name = "jplearnbot"
+name = "kate_bot"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,8 +8,8 @@ name = "dict_combine"
 path = "src/bin/dict_combine/main.rs"
 
 [[bin]]
-name = "kate_bot"
-path = "src/bin/kate_bot/main.rs"
+name = "bot"
+path = "src/bin/bot/main.rs"
 
 [dependencies]
 chrono = "0.4.41"

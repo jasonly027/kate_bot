@@ -1,3 +1,5 @@
+//! This module contains configuration and environment setup utilities.
+
 use std::{
     env, fs, process,
     sync::{Arc, LazyLock},
@@ -12,6 +14,7 @@ use tracing::{error, info, warn};
 
 use crate::{commands, models::{manager::Manager, net::{KateData, KateError}}};
 
+/// Specifies the environment for the bot.
 #[derive(EnumString, Display, Clone, Copy)]
 pub enum Env {
     #[strum(serialize = "dev")]

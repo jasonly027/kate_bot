@@ -96,6 +96,7 @@ where
     }
 }
 
+/// Manages the ongoing game.
 #[instrument(level = "warn", skip(ctx, service, receiver), fields(lobby_id = ctx.lobby_id))]
 pub async fn handler(
     mut ctx: GameContext,
@@ -110,7 +111,8 @@ pub async fn handler(
         let msg = create_initial_msg(&ctx.game_id, question, service.round(), service.mode());
         let files = create_files(question.prompt());
 
-        // Send round prompt with retry handling
+        // The game is aborted if sending the round prompt fails
+        // three times consecutively.
         if let Err(error) = ctx.send_files(msg, files).await {
             warn!(%error, "Send round prompt failed");
             if retries >= MAX_RETRIES {
@@ -129,6 +131,7 @@ pub async fn handler(
             retries = 0;
         }
 
+        // Listen and handle interactions on the game's choice buttons.
         let exit = router(&mut ctx, &mut service, &mut receiver).listen().await;
 
         match exit {
@@ -161,6 +164,7 @@ fn router<'a>(
     ];
 
     Router::new(ctx, receiver, routes).validator(|ctx, event| {
+        // Filter out stray messages not intended for this game.
         if let GameMessage::Event(event) = event {
             event.game_id() == ctx.game_id
         } else {
@@ -190,12 +194,15 @@ async fn gm_event(
         .ok();
 
     let correct = ctx.service.select_choice(choice);
+
+    // If the choice was correct show answer embed and move to next round.
+    // If the choice was incorrect show insult embed and continue current round.
     if correct {
         event
             .message
             .edit(
                 &ctx.manager.http,
-                create_correct_edit(&event.user.name, ctx.service),
+                create_correct_edit(&ctx.game_id, &event.user.name, ctx.service),
             )
             .await
             .on_err_warn("Update with correct answer failed")
@@ -297,11 +304,13 @@ fn create_files(text: &str) -> Vec<CreateAttachment> {
     )]
 }
 
-fn create_correct_edit(name: &str, service: &GameService) -> EditMessage {
+fn create_correct_edit(game_id: &str, name: &str, service: &GameService) -> EditMessage {
+    let round = service.round();
+    let question = service.question().unwrap();
     EditMessage::new()
-        .add_embed(create_prompt_embed(service.round(), service.mode()))
-        .add_embed(create_answer_embed(name, service.question().unwrap()))
-        .components(Vec::new())
+        .add_embed(create_prompt_embed(round, service.mode()))
+        .add_embed(create_answer_embed(name, question))
+        .components(create_choice_btns(game_id, round, question))
 }
 
 fn create_answer_embed<const N: usize>(name: &str, question: &Question<N>) -> CreateEmbed {
@@ -335,5 +344,10 @@ fn create_incorrect_edit(
 }
 
 fn create_insult_embed(user_id: UserId, choice: &str) -> CreateEmbed {
-    CreateEmbed::new().description(emote::insult_message(user_id, choice))
+    let mut insult = emote::insult_message(user_id, choice);
+    insult.push_str("\n\u{200B}");
+
+    CreateEmbed::new()
+        .title("Incorrect · 間違った")
+        .field("\u{200B}", insult, false)
 }

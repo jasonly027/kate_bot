@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use jplearnbot::dictionary::{DictEntry, Kanji, NLevel, Pos, Reading, Sense};
+use kate_bot::dictionary::{DictEntry, Kanji, NLevel, Pos, Reading, Sense};
 use rand::{
     rng,
     seq::{IteratorRandom, SliceRandom},

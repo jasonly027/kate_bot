@@ -3,7 +3,7 @@ use std::{
     process,
 };
 
-use jplearnbot::dictionary::NLevel;
+use kate_bot::dictionary::NLevel;
 use poise::{
     CreateReply,
     serenity_prelude::{
@@ -44,6 +44,7 @@ impl DerefMut for SetupContext<'_, '_> {
     }
 }
 
+/// Sets up creating a new multi_choice game.
 pub async fn handler(mut ctx: KateContext<'_>, service: SetupService) -> KateResult {
     let id = ctx.id();
     let levels_id = format!("{id}-lvls");
@@ -60,6 +61,7 @@ pub async fn handler(mut ctx: KateContext<'_>, service: SetupService) -> KateRes
 
     let reply_handle = ctx.send(first_reply).await.on_err_warn_send_failed()?;
 
+    // Listen and handle interactions on the game setup buttons.
     router(&mut ctx, service, &levels_id, &filters_id, &submit_id)
         .listen()
         .await;
@@ -145,6 +147,7 @@ async fn submit(ctx: &mut SetupContext<'_, '_>, event: ComponentInteraction) -> 
         .service
         .submit(ctx.lobby_id(), ctx.channel_id(), ctx.id());
 
+    // On successful game creation, tell router to stop listening.
     if success {
         event
             .delete_response(**ctx)

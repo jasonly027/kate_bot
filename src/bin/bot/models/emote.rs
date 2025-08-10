@@ -1,3 +1,5 @@
+//! This module contains emotes.
+
 use lazy_static::lazy_static;
 use poise::serenity_prelude::UserId;
 use rand::{rng, seq::IndexedRandom};
@@ -108,7 +110,7 @@ lazy_static! {
     };
 }
 
-/// Creates a randomized insult message that mentions `user_id`.
+/// Creates a randomized insult message that @mentions `user_id` and shames their `choice`.
 pub fn insult_message(user_id: UserId, choice: &str) -> String {
     let insult = insults.choose(&mut rng()).unwrap();
     format!("{insult} <@{user_id}> ({choice})")

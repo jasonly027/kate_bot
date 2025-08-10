@@ -16,7 +16,6 @@ mod util;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-
     dotenv().ok();
 
     info!("Running in {} mode", config::environment());

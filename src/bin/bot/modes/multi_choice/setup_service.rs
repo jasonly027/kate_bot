@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use jplearnbot::dictionary::NLevel;
+use kate_bot::dictionary::NLevel;
 use poise::serenity_prelude::ChannelId;
 use strum::IntoEnumIterator;
 
@@ -32,10 +32,14 @@ impl TryInto<MultiChoiceMode> for ModeChoice {
     }
 }
 
+/// Stateful service for setting up a multi_choice game.
 pub struct Service {
     manager: Arc<Manager>,
+    /// Desired levels when creating dictionary subset
     levels: Vec<NLevel>,
+    /// Desired filters when creating dictionary subset
     filters: Vec<PosFilter>,
+    /// Desired sub game mode
     mode: MultiChoiceMode,
 }
 
@@ -66,6 +70,11 @@ impl Service {
         self.filters = filters;
     }
 
+    /// Attemps to create a game with `lobby_id`. The game is spawned as a separate
+    /// async task and this returns immediately.
+    /// 
+    /// Return true if game creation was successful. Returns false if there's already
+    /// an existing game.
     pub fn submit(&mut self, lobby_id: u64, channel_id: ChannelId, game_id: u64) -> bool {
         let Some(receiver) = self.manager.create_lobby(lobby_id, game_id.to_string()) else {
             return false;

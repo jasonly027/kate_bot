@@ -1,3 +1,5 @@
+//! This module slash commands.
+
 mod start;
 pub use start::*;
 

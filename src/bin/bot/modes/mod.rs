@@ -2,7 +2,7 @@
 
 pub mod multi_choice;
 
-/// Game modes
+/// All game modes
 #[derive(Debug, poise::ChoiceParameter, Clone, Copy)]
 pub enum ModeChoice {
     #[name = "English ▶ ひらがな"]

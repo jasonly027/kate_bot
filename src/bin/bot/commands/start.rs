@@ -25,7 +25,7 @@ pub async fn start(
         | ModeChoice::KanToHir
         | ModeChoice::KanToEng
         | ModeChoice::EngToKan => {
-            modes::multi_choice::router(ctx, mode.try_into().unwrap()).await?
+            modes::multi_choice::handler(ctx, mode.try_into().unwrap()).await?
         }
     }
 

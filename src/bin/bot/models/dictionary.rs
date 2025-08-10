@@ -1,15 +1,17 @@
+//! This module contains [`Dictionary`] which has a handle to Japense-English entries.
+
 use std::{
     io::{BufRead, Cursor},
     sync::Arc,
 };
 
-use jplearnbot::dictionary::{DictEntry, NLevel, Pos};
+use kate_bot::dictionary::{DictEntry, NLevel, Pos};
 use strum_macros::{EnumIter, EnumString};
 
 /// Contains [`DictEntry`]'s.
 #[derive(Debug)]
 pub struct Dictionary {
-    /// Contains all of the entries.
+    /// A list of loaded Japanese-English entries.
     pub entries: Vec<Arc<DictEntry>>,
 }
 
@@ -33,10 +35,13 @@ impl Default for Dictionary {
 }
 
 impl Dictionary {
+    /// Identical to calling [`Dictionary::default()`].
     pub fn new() -> Self {
         Dictionary::default()
     }
 
+    /// Extracts a subset of entries where each entry has a level matching
+    /// at least one from `levels` and has a pos matching at least one from `pos`.
     pub fn subset(&self, levels: &[NLevel], pos: &[Pos]) -> Vec<Arc<DictEntry>> {
         self.entries
             .iter()
@@ -52,6 +57,7 @@ impl Dictionary {
     }
 }
 
+/// [`Pos`]'s grouped into general categories.
 #[derive(Debug, Clone, Copy, EnumString, EnumIter, strum_macros::Display)]
 pub enum PosFilter {
     #[strum(to_string = "Nouns 名詞")]
@@ -68,6 +74,7 @@ pub enum PosFilter {
 }
 
 impl PosFilter {
+    /// Gets the pos under this filter category.
     pub const fn as_pos(&self) -> &'static [Pos] {
         const NOUNS: [Pos; 7] = [
             Pos::N,
