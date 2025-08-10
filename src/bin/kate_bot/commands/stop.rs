@@ -1,4 +1,4 @@
-use crate::{config::KateContext, KateError};
+use crate::{models::net::{KateContext, KateResult}, util::LobbyId};
 
 /// Stops the active game, if any.
 #[poise::command(
@@ -7,9 +7,8 @@ use crate::{config::KateContext, KateError};
     name_localized("ja", "止まる"),
     description_localized("ja", "ゲームを止まる")
 )]
-pub async fn stop(ctx: KateContext<'_>) -> Result<(), KateError> {
-    let session_id = ctx.guild_id().map(|g| g.get()).unwrap_or(ctx.author().id.get());
-    let stopped = ctx.data().manager.stop(session_id).await;
+pub async fn stop(ctx: KateContext<'_>) -> KateResult {
+    let stopped = ctx.data().manager.remove_lobby(ctx.lobby_id());
 
     if stopped {
         ctx.say("Stopping game...").await?;

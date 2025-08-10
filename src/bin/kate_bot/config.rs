@@ -10,14 +10,7 @@ use poise::{
 use strum_macros::{Display, EnumString};
 use tracing::{error, info, warn};
 
-use crate::{commands, models::manager::Manager, modes::multi_choice};
-
-#[derive(Debug)]
-pub struct KateData {
-    pub manager: Arc<Manager>,
-}
-pub type KateContext<'a> = poise::Context<'a, KateData, KateError>;
-pub type KateError = Box<dyn std::error::Error + Send + Sync>;
+use crate::{commands, models::{manager::Manager, net::{KateData, KateError}}};
 
 #[derive(EnumString, Display, Clone, Copy)]
 pub enum Env {
@@ -39,7 +32,7 @@ pub fn environment() -> Env {
         };
 
         env.parse().unwrap_or_else(|_| {
-            error!("Invalid value \"{}\" for ENV environment variable", env);
+            error!("Invalid value \"{env}\" for ENV environment variable");
             process::exit(1);
         })
     });
@@ -65,7 +58,7 @@ pub fn discord_token() -> &'static str {
 
             fs::read_to_string(&file)
                 .unwrap_or_else(|err| {
-                    error!(message = "Failed to read from DISCORD_TOKEN_FILE", error = %err);
+                    error!(error = %err, "Failed to read from DISCORD_TOKEN_FILE");
                     process::exit(1);
                 })
                 .trim()
@@ -88,10 +81,7 @@ pub fn discord_dev_guild_id() -> u64 {
         };
 
         id.parse().unwrap_or_else(|_| {
-            error!(
-                "Invalid value \"{}\" for DISCORD_DEV_GUILD_ID environment variable",
-                id
-            );
+            error!("Invalid value \"{id}\" for DISCORD_DEV_GUILD_ID environment variable");
             process::exit(1);
         })
     });
@@ -103,11 +93,11 @@ pub fn framework_options() -> FrameworkOptions<KateData, KateError> {
     poise::FrameworkOptions {
         commands: vec![commands::start(), commands::stop(), commands::info()],
 
-        event_handler: |_ctx, event, framework, _data| {
+        event_handler: |_ctx, event, _framework, data| {
             Box::pin(async move {
                 if let serenity::FullEvent::InteractionCreate { interaction } = event {
                     if let Some(interaction) = interaction.clone().into_message_component() {
-                        framework.user_data.manager.send(interaction).await;
+                        data.manager.send(interaction).await;
                     };
                 };
 

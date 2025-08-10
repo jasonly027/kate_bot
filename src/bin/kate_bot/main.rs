@@ -5,7 +5,7 @@ use poise::{
 };
 use tracing::info;
 
-use crate::config::{KateData, KateError};
+use crate::models::net::{KateData, KateError};
 
 mod config;
 mod models;

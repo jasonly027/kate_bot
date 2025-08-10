@@ -1,12 +1,12 @@
 use image::{ImageBuffer, Luma};
+use poise::serenity_prelude::{ComponentInteraction, GuildId};
 use rusttype::{Font, Scale, point};
-use std::{
-    fmt::{Debug, Display},
-    process,
-    str::FromStr,
-};
+use std::fmt::Display;
+use std::{fmt::Debug, process, str::FromStr};
 use std::{io::Cursor, sync::LazyLock};
 use tracing::{error, warn};
+
+use crate::models::net::KateContext;
 
 pub trait ParseUnwrapAll<T> {
     fn parse_unwrap_all(self) -> Vec<T>;
@@ -23,7 +23,7 @@ where
         self.into_iter()
             .map(|value| {
                 value.as_ref().parse().unwrap_or_else(|err| {
-                    error!(message = "Failed to parse value", value = value.as_ref(), error = ?err);
+                    error!(value = value.as_ref(), error = ?err, "Failed to parse value");
                     process::exit(2)
                 })
             })
@@ -31,8 +31,73 @@ where
     }
 }
 
-pub fn log_sending_error<E: Display>(err: &E) {
-    warn!(message = "Send failed", error = %err);
+pub trait LobbyId {
+    fn lobby_id(&self) -> u64;
+}
+
+impl LobbyId for KateContext<'_> {
+    fn lobby_id(&self) -> u64 {
+        self.guild_id()
+            .map(GuildId::get)
+            .unwrap_or(self.author().id.get())
+    }
+}
+
+impl LobbyId for ComponentInteraction {
+    fn lobby_id(&self) -> u64 {
+        self.guild_id
+            .map(GuildId::get)
+            .unwrap_or(self.user.id.get())
+    }
+}
+
+pub trait GameId {
+    fn game_id(&self) -> &str;
+}
+
+impl GameId for ComponentInteraction {
+    fn game_id(&self) -> &str {
+        self.data
+            .custom_id
+            .split_once(",")
+            .map(|(left, _)| left)
+            .unwrap_or(&self.data.custom_id)
+    }
+}
+
+pub trait Logging {
+    fn on_err_warn(self, message: &str) -> Self
+    where
+        Self: Sized;
+
+    fn on_err_warn_send_failed(self) -> Self
+    where
+        Self: Sized;
+}
+
+impl<T, E> Logging for Result<T, E>
+where
+    E: Display,
+{
+    fn on_err_warn(self, message: &str) -> Self
+    where
+        Self: Sized,
+    {
+        if let Err(ref error) = self {
+            warn!(%error, message);
+        }
+        self
+    }
+
+    fn on_err_warn_send_failed(self) -> Self
+    where
+        Self: Sized,
+    {
+        if let Err(ref error) = self {
+            warn!(%error, "Send failed");
+        }
+        self
+    }
 }
 
 /// Converts `text` into a rasterized PNG image in bytes.
