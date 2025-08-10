@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use jplearnbot::dictionary::NLevel;
 use poise::serenity_prelude::{
     ChannelId, CreateActionRow, CreateAttachment, CreateButton, CreateEmbed,
     CreateInteractionResponse, CreateMessage, EditMessage, Error as SerenityError, Message, UserId,
@@ -234,7 +233,7 @@ async fn gm_timeout(
     ctx: &mut RoundContext<'_>,
     _event: GameMessage,
 ) -> RoutingResult<RoundExitReason> {
-    ctx.send_message(CreateMessage::new().content("Stopping game due to inactivity"))
+    ctx.send_message(CreateMessage::new().content("Stopping game due to inactivity..."))
         .await
         .on_err_warn_send_failed()
         .ok();
@@ -301,21 +300,13 @@ fn create_files(text: &str) -> Vec<CreateAttachment> {
 fn create_correct_edit(name: &str, service: &GameService) -> EditMessage {
     EditMessage::new()
         .add_embed(create_prompt_embed(service.round(), service.mode()))
-        .add_embed(create_answer_embed(
-            name,
-            service.question().unwrap(),
-            service.levels(),
-        ))
+        .add_embed(create_answer_embed(name, service.question().unwrap()))
         .components(Vec::new())
 }
 
-fn create_answer_embed<const N: usize>(
-    name: &str,
-    question: &Question<N>,
-    levels: &[NLevel],
-) -> CreateEmbed {
+fn create_answer_embed<const N: usize>(name: &str, question: &Question<N>) -> CreateEmbed {
     const THUMBNAIL: &str = r"https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png";
-    let header = format!("{} {:?}", question.answer(), levels);
+    let header = format!("{} {:?}", question.answer(), question.difficulty());
     let body = format!(
         "[**Definition ・ 意味**](https://jisho.org/search/{})\n{} {}",
         urlencoding::encode(question.answer()),

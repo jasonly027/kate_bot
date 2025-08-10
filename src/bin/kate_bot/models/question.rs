@@ -1,3 +1,4 @@
+use jplearnbot::dictionary::NLevel;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -6,6 +7,7 @@ pub struct Question<const N: usize> {
     choices: [String; N],
     guessed: [bool; N],
     answer_idx: usize,
+    difficulty: Vec<NLevel>,
 }
 
 #[derive(Debug, Error)]
@@ -18,7 +20,7 @@ pub enum QuestionError {
 }
 
 impl<const N: usize> Question<N> {
-    pub fn new(prompt: String, choices: [String; N], answer: usize) -> Result<Self, QuestionError> {
+    pub fn new(prompt: String, choices: [String; N], answer: usize, difficulty: Vec<NLevel>) -> Result<Self, QuestionError> {
         if choices.is_empty() {
             return Err(QuestionError::EmptyChoices);
         }
@@ -31,6 +33,7 @@ impl<const N: usize> Question<N> {
             choices,
             guessed: [false; N],
             answer_idx: answer,
+            difficulty
         })
     }
 
@@ -48,6 +51,10 @@ impl<const N: usize> Question<N> {
 
     pub fn answer(&self) -> &str {
         &self.choices[self.answer_idx]
+    }
+
+    pub fn difficulty(&self) -> &Vec<NLevel> {
+        &self.difficulty
     }
 
     #[allow(dead_code)]

@@ -64,6 +64,7 @@ impl Service {
         }
     }
 
+    #[allow(dead_code)]
     pub fn levels(&self) -> &Vec<NLevel> {
         &self.levels
     }
@@ -153,7 +154,7 @@ fn new_eng_to_hir(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| reading.text == *o).unwrap();
 
-    Some(Question::new(sense.gloss[0].content.clone(), choices, answer).unwrap())
+    Some(Question::new(sense.gloss[0].content.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 fn new_hir_to_eng(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -180,7 +181,7 @@ fn new_hir_to_eng(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
         .position(|o| sense.gloss[0].content == *o)
         .unwrap();
 
-    Some(Question::new(reading.text.clone(), choices, answer).unwrap())
+    Some(Question::new(reading.text.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 fn new_hir_to_kan(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -203,7 +204,7 @@ fn new_hir_to_kan(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| kanji.text == *o).unwrap();
 
-    Some(Question::new(reading.text.clone(), choices, answer).unwrap())
+    Some(Question::new(reading.text.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 fn new_kan_to_hir(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -227,7 +228,7 @@ fn new_kan_to_hir(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| reading.text == *o).unwrap();
 
-    Some(Question::new(kanji.text.clone(), choices, answer).unwrap())
+    Some(Question::new(kanji.text.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 fn new_kan_to_eng(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -254,7 +255,7 @@ fn new_kan_to_eng(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
         .position(|o| sense.gloss[0].content == *o)
         .unwrap();
 
-    Some(Question::new(kanji.text.clone(), choices, answer).unwrap())
+    Some(Question::new(kanji.text.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 fn new_eng_to_kan(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -278,7 +279,7 @@ fn new_eng_to_kan(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| kanji.text == *o).unwrap();
 
-    Some(Question::new(sense.gloss[0].content.clone(), choices, answer).unwrap())
+    Some(Question::new(sense.gloss[0].content.clone(), choices, answer, entry.levels()).unwrap())
 }
 
 /// Conventiently extracts a [`Reading`] and correlated [`Sense`] from a [`DictEntry`] where
