@@ -1,6 +1,6 @@
 use std::{io::BufRead, path::Path};
 
-use jplearnbot::{dictionary::NLevel, open_reader};
+use kate_bot::{dictionary::NLevel, open_reader};
 
 pub struct JlptEntry {
     pub hiragana: String,

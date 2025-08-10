@@ -1,6 +1,6 @@
 use poise::{CreateReply, serenity_prelude::CreateEmbed};
 
-use crate::{config::Context, Error};
+use crate::models::net::{KateContext, KateResult};
 
 /// Information about the bot.
 #[poise::command(
@@ -9,7 +9,7 @@ use crate::{config::Context, Error};
     name_localized("ja", "情報"),
     description_localized("ja", "ボットの情報")
 )]
-pub async fn info(ctx: Context<'_>) -> Result<(), Error> {
+pub async fn info(ctx: KateContext<'_>) -> KateResult {
     ctx.send(
         CreateReply::default()
         .content("Art - <https://x.com/matcha__ore_p/>\nQuestions/Feedback - (discord) sweetenedlegs")

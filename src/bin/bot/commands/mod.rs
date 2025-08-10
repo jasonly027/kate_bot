@@ -1,3 +1,5 @@
+//! This module slash commands.
+
 mod start;
 pub use start::*;
 
@@ -6,4 +8,3 @@ pub use stop::*;
 
 mod info;
 pub use info::*;
-

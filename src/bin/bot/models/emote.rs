@@ -1,4 +1,8 @@
+//! This module contains emotes.
+
 use lazy_static::lazy_static;
+use poise::serenity_prelude::UserId;
+use rand::{rng, seq::IndexedRandom};
 
 use crate::config::{Env, environment};
 
@@ -55,4 +59,59 @@ lazy_static! {
             }
         }
     };
+
+    static ref insults: [String; 28] = {
+        let Emote {
+            wow: _wow,
+            fubu_laugh,
+            scrajj,
+            anw,
+            wat,
+            maji,
+            ee,
+            baaka,
+            manuke,
+            wawawa,
+            hehe,
+            hayaku,
+            goofyahh,
+        } = *emote;
+
+        [
+            format!("{wat} noob"),
+            format!("{wat} nuh-uh"),
+            format!("{wat} what is he cooking"),
+            format!("{wat} refund nitro"),
+            format!("{wat} trolling are we?"),
+            format!("{wat} nt bro"),
+            format!("{wat} smooth brain"),
+            format!("{wat} stop"),
+            format!("{wat} ?"),
+            format!("{wat} so bad"),
+            format!("{wat} meow"),
+            format!("{wat} imagine"),
+            format!("{wat} no"),
+            format!("{wat} wrong"),
+            format!("{wat} ぴえん"),
+            format!("{wat} あほ"),
+            wat.to_string(),
+            fubu_laugh.to_string(),
+            scrajj.to_string(),
+            anw.to_string(),
+            format!("{maji} マ？"),
+            format!("{ee} え？"),
+            format!("{baaka} ばーか！"),
+            format!("{manuke} アンタがまぬけ？"),
+            format!("{wawawa} How?"),
+            format!("{hehe} あほ！"),
+            format!("{hayaku} 早く！"),
+            format!("{}{}{}", goofyahh, goofyahh, goofyahh),
+        ]
+    };
+}
+
+/// Creates a randomized insult message that @mentions `user_id` and shames their `choice`.
+pub fn insult_message(user_id: UserId, choice: &str) -> String {
+    let insult = insults.choose(&mut rng()).unwrap();
+    format!("{insult} <@{user_id}> ({choice})")
 }

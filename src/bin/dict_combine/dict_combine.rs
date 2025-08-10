@@ -7,7 +7,7 @@ use std::{
     rc::Rc,
 };
 
-use jplearnbot::dictionary::{DictEntry, NLevel};
+use kate_bot::dictionary::{DictEntry, NLevel};
 
 use crate::{
     dictionary,
