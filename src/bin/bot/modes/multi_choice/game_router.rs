@@ -164,10 +164,14 @@ pub async fn handler(
         .ok();
     }
 
-    ctx.send_message(CreateMessage::new().add_embed(create_scoreboard_embed(service.scoreboard())))
+    if service.scoreboard().iter().any(|_| true) {
+        ctx.send_message(
+            CreateMessage::new().add_embed(create_scoreboard_embed(service.scoreboard())),
+        )
         .await
         .on_err_warn("Send scoreboard failed")
         .ok();
+    }
 }
 
 fn router<'a>(
@@ -406,17 +410,13 @@ fn create_scoreboard_embed(scoreboard: &Scoreboard) -> CreateEmbed {
     // Prepend medals to top three stat holders
     stats
         .iter_mut()
-        .zip(["🥇", "🥈", "🥉", ""])
+        .zip(["🥇 ", "🥈 ", "🥉 ", "\n"])
         .for_each(|(details, medal)| {
-            if medal.is_empty() {
-                details.push('\n');
-            } else {
-                *details = format!("{medal} {details}");
-            }
+            *details = format!("{medal}{details}");
         });
 
     CreateEmbed::new()
-        .title("Scoreboard · <jp here>")
+        .title("Scoreboard")
         .description(stats.join("\n"))
         .footer(CreateEmbedFooter::new(format!(
             "Rounds Played: {}",
