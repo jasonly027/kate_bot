@@ -1,11 +1,11 @@
 //! This module contains emotes.
 
 use lazy_static::lazy_static;
-use poise::serenity_prelude::UserId;
 use rand::{rng, seq::IndexedRandom};
 
 use crate::config::{Env, environment};
 
+#[allow(dead_code)]
 pub struct Emote {
     pub wow: &'static str,
     pub fubu_laugh: &'static str,
@@ -59,59 +59,114 @@ lazy_static! {
             }
         }
     };
-
-    static ref insults: [String; 28] = {
-        let Emote {
-            wow: _wow,
-            fubu_laugh,
-            scrajj,
-            anw,
-            wat,
-            maji,
-            ee,
-            baaka,
-            manuke,
-            wawawa,
-            hehe,
-            hayaku,
-            goofyahh,
-        } = *emote;
-
-        [
-            format!("{wat} noob"),
-            format!("{wat} nuh-uh"),
-            format!("{wat} what is he cooking"),
-            format!("{wat} refund nitro"),
-            format!("{wat} trolling are we?"),
-            format!("{wat} nt bro"),
-            format!("{wat} smooth brain"),
-            format!("{wat} stop"),
-            format!("{wat} ?"),
-            format!("{wat} so bad"),
-            format!("{wat} meow"),
-            format!("{wat} imagine"),
-            format!("{wat} no"),
-            format!("{wat} wrong"),
-            format!("{wat} ぴえん"),
-            format!("{wat} あほ"),
-            wat.to_string(),
-            fubu_laugh.to_string(),
-            scrajj.to_string(),
-            anw.to_string(),
-            format!("{maji} マ？"),
-            format!("{ee} え？"),
-            format!("{baaka} ばーか！"),
-            format!("{manuke} アンタがまぬけ？"),
-            format!("{wawawa} How?"),
-            format!("{hehe} あほ！"),
-            format!("{hayaku} 早く！"),
-            format!("{}{}{}", goofyahh, goofyahh, goofyahh),
-        ]
-    };
 }
 
-/// Creates a randomized insult message that @mentions `user_id` and shames their `choice`.
-pub fn insult_message(user_id: UserId, choice: &str) -> String {
-    let insult = insults.choose(&mut rng()).unwrap();
-    format!("{insult} <@{user_id}> ({choice})")
+pub struct Thumbnail<'a> {
+    pub wat: &'a str,
+    pub maji: &'a str,
+    pub ee: &'a str,
+    pub baaka: &'a str,
+    pub manuke: &'a str,
+    pub wawawa: &'a str,
+    pub hehe: &'a str,
+    pub hayaku: &'a str,
 }
+
+pub const THUMBNAIL: Thumbnail = Thumbnail {
+    wat: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    maji: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    ee: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    baaka: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    manuke: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    wawawa: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    hehe: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    hayaku: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+};
+
+pub struct Insult<'a> {
+    pub message: &'a str,
+    pub thumbnail_url: &'a str,
+}
+
+#[rustfmt::skip]
+pub const THUMBNAILS: [Insult; 23] = [
+	Insult { message: "noob", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "nuh-uh", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "what is he cooking", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "refund nitro", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "trolling are we?", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "nt bro", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "smooth brain", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "stop", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "?", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "so bad", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "meow", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "imagine", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "no", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "wrong", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "ぴえん", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "あほ", thumbnail_url: THUMBNAIL.wat, },
+	Insult { message: "マ？", thumbnail_url: THUMBNAIL.maji, },
+	Insult { message: "え？", thumbnail_url: THUMBNAIL.ee, },
+	Insult { message: "ばーか！", thumbnail_url: THUMBNAIL.baaka, },
+	Insult { message: "アンタがまぬけ？", thumbnail_url: THUMBNAIL.manuke, },
+	Insult { message: "How?", thumbnail_url: THUMBNAIL.wawawa, },
+	Insult { message: "あほ！", thumbnail_url: THUMBNAIL.hehe, },
+	Insult { message: "早く！", thumbnail_url: THUMBNAIL.hayaku, },
+];
+
+pub fn random_insult() -> &'static Insult<'static> {
+    THUMBNAILS.choose(&mut rng()).unwrap()
+}
+
+// lazy_static! {
+//     static ref insults: [String; 23] = {
+//         let Emote {
+//             wow: _wow,
+//             fubu_laugh,
+//             scrajj,
+//             anw,
+//             wat,
+//             maji,
+//             ee,
+//             baaka,
+//             manuke,
+//             wawawa,
+//             hehe,
+//             hayaku,
+//             goofyahh,
+//         } = *emote;
+
+//         [
+//             format!("{wat} noob"),
+//             format!("{wat} nuh-uh"),
+//             format!("{wat} what is he cooking"),
+//             format!("{wat} refund nitro"),
+//             format!("{wat} trolling are we?"),
+//             format!("{wat} nt bro"),
+//             format!("{wat} smooth brain"),
+//             format!("{wat} stop"),
+//             format!("{wat} ?"),
+//             format!("{wat} so bad"),
+//             format!("{wat} meow"),
+//             format!("{wat} imagine"),
+//             format!("{wat} no"),
+//             format!("{wat} wrong"),
+//             format!("{wat} ぴえん"),
+//             format!("{wat} あほ"),
+//             format!("{maji} マ？"),
+//             format!("{ee} え？"),
+//             format!("{baaka} ばーか！"),
+//             format!("{manuke} アンタがまぬけ？"),
+//             format!("{wawawa} How?"),
+//             format!("{hehe} あほ！"),
+//             format!("{hayaku} 早く！"),
+//         ]
+//     };
+// }
+
+// Creates a randomized insult message that @mentions `user_id` and shames their `choice`.
+// pub fn insult_message(user_id: UserId, choice: &str) -> String {
+//     let insult = insults.choose(&mut rng()).unwrap();
+//     format!("{insult} <@{user_id}> ({choice})")
+// }
