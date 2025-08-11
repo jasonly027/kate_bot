@@ -73,14 +73,14 @@ pub struct Thumbnail<'a> {
 }
 
 pub const THUMBNAIL: Thumbnail = Thumbnail {
-    wat: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    maji: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    ee: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    baaka: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    manuke: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    wawawa: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    hehe: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
-    hayaku: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
+    wat: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/wat.png",
+    maji: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/maji.png",
+    ee: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/ee.png",
+    baaka: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/baaka.png",
+    manuke: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/manuke.png",
+    wawawa: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/wawawa.png",
+    hehe: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/hehe.png",
+    hayaku: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/hayaku.png",
 };
 
 pub struct Insult<'a> {
