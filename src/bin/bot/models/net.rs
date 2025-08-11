@@ -114,6 +114,9 @@ impl<Context, Request, Provider: self::Provider<Request>, RouteExitT, const N: u
     /// Listen for events from the provider and try to match it to a router.
     /// If an event could be matched to multiple routers, the event will be
     /// passed to the matchable route that was defined first.
+    /// 
+    /// Returns Some if a router requested ending the listen.
+    /// Return None if the provider ended the listen by passing None.
     pub async fn listen(&mut self) -> Option<RouteExitT> {
         while let Some(event) = self.provider.next().await {
             if !self.validate(&event) {

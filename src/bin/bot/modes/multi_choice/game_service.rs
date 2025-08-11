@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use kate_bot::dictionary::{DictEntry, Kanji, NLevel, Pos, Reading, Sense};
+use poise::serenity_prelude::UserId;
 use rand::{
     rng,
     seq::{IteratorRandom, SliceRandom},
@@ -10,6 +11,7 @@ use crate::{
     models::{
         dictionary::{Dictionary, PosFilter},
         question,
+        scoreboard::Scoreboard,
     },
     modes::multi_choice::MultiChoiceMode,
 };
@@ -33,6 +35,7 @@ pub struct Service {
     mode: MultiChoiceMode,
     round: u32,
     question: Option<Question>,
+    scoreboard: Scoreboard,
 }
 
 impl Service {
@@ -61,6 +64,7 @@ impl Service {
             mode,
             round: 0,
             question: None,
+            scoreboard: Scoreboard::new(),
         }
     }
 
@@ -100,11 +104,23 @@ impl Service {
         false
     }
 
-    pub fn select_choice(&mut self, choice: usize) -> bool {
-        self.question
-            .as_mut()
-            .map(|g| g.guess(choice))
-            .unwrap_or(false)
+    pub fn scoreboard(&self) -> &Scoreboard {
+        &self.scoreboard
+    }
+
+    pub fn select_choice(&mut self, user: UserId, choice: usize) -> bool {
+        let Some(question) = self.question.as_mut() else {
+            return false;
+        };
+
+        let correct = question.guess(choice);
+        if correct {
+            self.scoreboard.add_win(user);
+        } else {
+            self.scoreboard.add_loss(user);
+        }
+
+        correct
     }
 
     fn next_entry(&mut self) -> Option<Arc<DictEntry>> {
@@ -154,7 +170,15 @@ fn new_eng_to_hir(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| reading.text == *o).unwrap();
 
-    Some(Question::new(sense.gloss[0].content.clone(), choices, answer, entry.levels()).unwrap())
+    Some(
+        Question::new(
+            sense.gloss[0].content.clone(),
+            choices,
+            answer,
+            entry.levels(),
+        )
+        .unwrap(),
+    )
 }
 
 fn new_hir_to_eng(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Option<Question> {
@@ -279,7 +303,15 @@ fn new_eng_to_kan(entry: &DictEntry, pos: Pos, dictionary: &Dictionary) -> Optio
 
     let answer = choices.iter().position(|o| kanji.text == *o).unwrap();
 
-    Some(Question::new(sense.gloss[0].content.clone(), choices, answer, entry.levels()).unwrap())
+    Some(
+        Question::new(
+            sense.gloss[0].content.clone(),
+            choices,
+            answer,
+            entry.levels(),
+        )
+        .unwrap(),
+    )
 }
 
 /// Conventiently extracts a [`Reading`] and correlated [`Sense`] from a [`DictEntry`] where
