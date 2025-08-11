@@ -13,7 +13,7 @@ use tracing::{debug, error, instrument, warn};
 
 use crate::{
     models::{
-        emote,
+        emote::{self, Insult},
         manager::Manager,
         net::{GameMessage, Provider, Route, Router, RoutingResult},
         question::Question,
@@ -344,10 +344,17 @@ fn create_incorrect_edit(
 }
 
 fn create_insult_embed(user_id: UserId, choice: &str) -> CreateEmbed {
-    let mut insult = emote::insult_message(user_id, choice);
-    insult.push_str("\n\u{200B}");
+    let Insult {
+        message,
+        thumbnail_url,
+    } = emote::random_insult();
 
     CreateEmbed::new()
         .title("Incorrect · 間違った")
-        .field("\u{200B}", insult, false)
+        .field(
+            "\u{200B}",
+            format!("{message} <@{user_id}> ({choice})\n\u{200B}"),
+            false,
+        )
+        .thumbnail(*thumbnail_url)
 }
