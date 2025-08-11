@@ -5,3 +5,4 @@ pub mod emote;
 pub mod manager;
 pub mod net;
 pub mod question;
+pub mod scoreboard;

@@ -4,6 +4,7 @@ use image::{ImageBuffer, Luma};
 use poise::serenity_prelude::{ComponentInteraction, GuildId};
 use rusttype::{Font, Scale, point};
 use std::fmt::Display;
+use std::slice;
 use std::{fmt::Debug, process, str::FromStr};
 use std::{io::Cursor, sync::LazyLock};
 use tracing::{error, warn};
@@ -114,6 +115,76 @@ where
             warn!(%error, "Send failed");
         }
         self
+    }
+}
+
+/// A warpper around [`Vec`] that lets it be used as if its a map.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct IndexMap<K, V>(Vec<(K, V)>);
+
+impl<K, V> Default for IndexMap<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<K: Eq, V> IndexMap<K, V> {
+    #[allow(dead_code)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Finds a value in the map using `key`.
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0
+            .iter()
+            .find(|entry| &entry.0 == key)
+            .map(|entry| &entry.1)
+    }
+
+    pub fn iter(&self) -> slice::Iter<'_, (K, V)> {
+        self.0.iter()
+    }
+
+    /// Inserts a key value pair into the map. Replaces value if key already
+    /// exists.
+    #[allow(dead_code)]
+    pub fn insert(&mut self, (key, value): (K, V)) {
+        match self.0.iter_mut().find(|entry| entry.0 == key) {
+            Some(entry) => entry.1 = value,
+            None => self.0.push((key, value)),
+        }
+    }
+
+    /// Finds a value in the map by the given key, or inserts it if it doesn't exist
+    #[allow(dead_code)]
+    pub fn get_or_insert(&mut self, key: K, value: V) -> &mut V {
+        match self.0.iter().position(|entry| entry.0 == key) {
+            Some(i) => &mut self.0[i].1,
+            None => {
+                self.0.push((key, value));
+                &mut self.0.last_mut().unwrap().1
+            }
+        }
+    }
+
+    /// Finds a value in the map by the given key, or inserts it if it doesn't exist
+    pub fn get_or_insert_with(&mut self, k: K, v: impl FnOnce() -> V) -> &mut V {
+        match self.0.iter().position(|entry| entry.0 == k) {
+            Some(i) => &mut self.0[i].1,
+            None => {
+                self.0.push((k, v()));
+                &mut self.0.last_mut().unwrap().1
+            }
+        }
+    }
+}
+
+impl<K, V> IntoIterator for IndexMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = std::vec::IntoIter<(K, V)>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
