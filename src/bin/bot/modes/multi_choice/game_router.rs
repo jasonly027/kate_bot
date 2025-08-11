@@ -1,11 +1,12 @@
 use std::{
+    cmp,
     ops::{Deref, DerefMut},
     sync::Arc,
     time::Duration,
 };
 
 use poise::serenity_prelude::{
-    ChannelId, CreateActionRow, CreateAttachment, CreateButton, CreateEmbed,
+    ChannelId, CreateActionRow, CreateAttachment, CreateButton, CreateEmbed, CreateEmbedFooter,
     CreateInteractionResponse, CreateMessage, EditMessage, Error as SerenityError, Message, UserId,
 };
 use tokio::{sync::mpsc::Receiver, time::timeout};
@@ -17,11 +18,19 @@ use crate::{
         manager::Manager,
         net::{GameMessage, Provider, Route, Router, RoutingResult},
         question::Question,
+        scoreboard::{ScoreEntry, Scoreboard},
     },
     modes::multi_choice::{MultiChoiceMode, game_service::Service as GameService},
     util::{self, GameId, Logging},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GameExitReason {
+    PoolExhausted,
+    CloseGame,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RoundExitReason {
     NextRound,
     CloseGame,
@@ -106,6 +115,7 @@ pub async fn handler(
     const MAX_RETRIES: i32 = 3;
     let mut retries = 0;
 
+    let mut game_exit_reason = GameExitReason::PoolExhausted;
     while service.next_round() {
         let question = service.question().unwrap();
         let msg = create_initial_msg(&ctx.game_id, question, service.round(), service.mode());
@@ -132,20 +142,36 @@ pub async fn handler(
         }
 
         // Listen and handle interactions on the game's choice buttons.
-        let exit = router(&mut ctx, &mut service, &mut receiver).listen().await;
+        let round_exit_reason = router(&mut ctx, &mut service, &mut receiver).listen().await;
 
-        match exit {
+        match round_exit_reason {
             Some(RoundExitReason::NextRound) => {}
-            Some(RoundExitReason::CloseGame) => return,
+            Some(RoundExitReason::CloseGame) => {
+                game_exit_reason = GameExitReason::CloseGame;
+                break;
+            }
             Some(RoundExitReason::NetError) => return,
-            None => return,
+            None => unreachable!("This receiver never passes None to router"),
         }
     }
 
-    ctx.send_message(CreateMessage::new().content("There are no more words left in the pool..."))
+    if game_exit_reason == GameExitReason::PoolExhausted {
+        ctx.send_message(
+            CreateMessage::new().content("There are no more words left in the pool..."),
+        )
         .await
-        .inspect_err(|error| warn!(%error, "Send pool exhausted failed"))
+        .on_err_warn("Send pool exhausted failed")
         .ok();
+    }
+
+    if service.scoreboard().iter().any(|_| true) {
+        ctx.send_message(
+            CreateMessage::new().add_embed(create_scoreboard_embed(service.scoreboard())),
+        )
+        .await
+        .on_err_warn("Send scoreboard failed")
+        .ok();
+    }
 }
 
 fn router<'a>(
@@ -193,7 +219,7 @@ async fn gm_event(
         .on_err_warn_send_failed()
         .ok();
 
-    let correct = ctx.service.select_choice(choice);
+    let correct = ctx.service.select_choice(event.user.id, choice);
 
     // If the choice was correct show answer embed and move to next round.
     // If the choice was incorrect show insult embed and continue current round.
@@ -220,6 +246,12 @@ async fn gm_event(
             .on_err_warn("Update with insult failed")
             .is_err()
         {
+            ctx.send_message(
+                CreateMessage::new().content("Aborting game because of network error..."),
+            )
+            .await
+            .on_err_warn("Send abort message failed")
+            .ok();
             return RoutingResult::Exit(RoundExitReason::NetError);
         }
 
@@ -357,4 +389,44 @@ fn create_insult_embed(user_id: UserId, choice: &str) -> CreateEmbed {
             false,
         )
         .thumbnail(*thumbnail_url)
+}
+
+fn create_scoreboard_embed(scoreboard: &Scoreboard) -> CreateEmbed {
+    const TOP_N: usize = 10;
+    const EPSILON: f64 = 1e-6;
+
+    let mut scores: Vec<(UserId, ScoreEntry)> = scoreboard.iter().cloned().collect();
+    scores.sort_unstable_by_key(|(user, score)| {
+        let wr_scaled = (score.win_rate() / EPSILON).round() as i64;
+        cmp::Reverse((wr_scaled, score.attempts(), *user))
+    });
+
+    let mut stats: Vec<String> = scores
+        .iter()
+        .take(TOP_N)
+        .map(|(user, score)| {
+            format!(
+                "<@{user}> **{:.1}%** ({} - {})",
+                score.win_rate() * 100.0,
+                score.wins(),
+                score.losses()
+            )
+        })
+        .collect();
+
+    // Prepend medals to top three stat holders
+    stats
+        .iter_mut()
+        .zip(["🥇 ", "🥈 ", "🥉 ", "\n"])
+        .for_each(|(details, medal)| {
+            *details = format!("{medal}{details}");
+        });
+
+    CreateEmbed::new()
+        .title("Scoreboard")
+        .description(stats.join("\n"))
+        .footer(CreateEmbedFooter::new(format!(
+            "Rounds Played: {}",
+            scoreboard.rounds()
+        )))
 }
