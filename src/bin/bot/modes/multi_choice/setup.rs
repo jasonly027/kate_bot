@@ -48,6 +48,7 @@ mod router {
     use crate::{
         models::net::{
             ComponentInteractionProvider, ContextBinder, KateContext, Route, Router, RoutingResult,
+            matcher,
         },
         modes::multi_choice::setup::service::Service as SetupService,
         util::{Logging, ParseUnwrapAll},
@@ -72,8 +73,7 @@ mod router {
             Route::new(submit_path, |ctx, event| Box::pin(submit(ctx, event))),
         ];
 
-        Router::new(ctx, provider, routes)
-            .matcher(|route, _ctx, event| event.data.custom_id == route.path)
+        Router::new(ctx, provider, routes).matcher(matcher::full_route_path)
     }
 
     #[instrument(level = "warn", skip(ctx, event))]

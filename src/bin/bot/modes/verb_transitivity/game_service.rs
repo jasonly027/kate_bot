@@ -34,13 +34,13 @@ impl Service {
                     .1
                     .levels()
                     .iter()
-                    .all(|lvl| levels.contains(lvl))
+                    .any(|lvl| levels.contains(lvl))
                     && tverb
                         .trans
                         .1
                         .levels()
                         .iter()
-                        .all(|lvl| levels.contains(lvl))
+                        .any(|lvl| levels.contains(lvl))
             })
             .cloned()
             .collect();

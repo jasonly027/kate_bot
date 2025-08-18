@@ -108,6 +108,7 @@ impl<Context, Request, Provider: self::Provider<Request>, RouteExitT, const N: u
     }
 
     // Sets the validator.
+    #[allow(dead_code)]
     pub fn validator(mut self, validator: fn(&Context, &Request) -> bool) -> Self {
         self.validator = Some(validator);
         self
@@ -171,6 +172,7 @@ impl<Context, Request, ExitT> Route<Context, Request, ExitT> {
 
     /// Sets the matcher. This matcher will take precedence in usage over a
     /// router level matcher.
+    #[allow(dead_code)]
     pub fn matcher(mut self, matcher: fn(&Self, &Context, &Request) -> bool) -> Self {
         self.matcher = Some(matcher);
         self
@@ -310,7 +312,7 @@ pub mod matcher {
 
     use crate::models::net::Route;
 
-    /// Matches a ComponentInteraction's `data.custom_id` with `route.path`
+    /// Matches a ComponentInteraction's `data.custom_id` with `route.path`.
     pub fn full_route_path<Context, ExitT>(
         route: &Route<Context, ComponentInteraction, ExitT>,
         _ctx: &Context,
