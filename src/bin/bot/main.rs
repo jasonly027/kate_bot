@@ -11,6 +11,7 @@ mod config;
 mod models;
 mod modes;
 mod commands;
+mod message;
 mod util;
 
 #[tokio::main]

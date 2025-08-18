@@ -29,6 +29,8 @@ pub struct Question<const N: usize> {
 }
 
 impl<const N: usize> Question<N> {
+    /// Creates a new Question. Fails if `choices` is empty or `answer` is a not
+    /// index into `choices`.
     pub fn new(
         prompt: String,
         choices: [String; N],
@@ -76,8 +78,11 @@ impl<const N: usize> Question<N> {
         self.answer_idx
     }
 
-    /// Inquire if one of the choices is the answer. Always returns false
-    /// on a `choice` index that is out of range of the valid choices range.
+    /// Inquire if one of the choices is the answer. Marks all
+    /// choices guessed on correct choice.
+    /// 
+    /// Always returns false on a `choice` index that is out
+    /// of range of the valid choices range.
     pub fn guess(&mut self, choice: usize) -> bool {
         let correct = choice == self.answer_idx;
 

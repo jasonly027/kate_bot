@@ -33,7 +33,6 @@ pub struct Service {
     sample: Vec<Arc<DictEntry>>,
     sample_idx: usize,
     mode: MultiChoiceMode,
-    round: u32,
     question: Option<Question>,
     scoreboard: Scoreboard,
 }
@@ -62,7 +61,6 @@ impl Service {
             sample,
             sample_idx: 0,
             mode,
-            round: 0,
             question: None,
             scoreboard: Scoreboard::new(),
         }
@@ -74,7 +72,7 @@ impl Service {
     }
 
     pub fn round(&self) -> u32 {
-        self.round
+        self.scoreboard.rounds()
     }
 
     pub fn mode(&self) -> MultiChoiceMode {
@@ -85,7 +83,11 @@ impl Service {
         self.question.as_ref()
     }
 
-    pub fn next_round(&mut self) -> bool {
+    pub fn scoreboard(&self) -> &Scoreboard {
+        &self.scoreboard
+    }
+
+    pub fn next_round(&mut self) {
         while let Some(entry) = self.next_entry() {
             self.pos.shuffle(&mut rng());
 
@@ -97,15 +99,11 @@ impl Service {
                 continue;
             };
             self.question = Some(question);
-            self.round += 1;
+            self.scoreboard.next_round();
 
-            return true;
+            return;
         }
-        false
-    }
-
-    pub fn scoreboard(&self) -> &Scoreboard {
-        &self.scoreboard
+        self.question = None;
     }
 
     pub fn select_choice(&mut self, user: UserId, choice: usize) -> bool {

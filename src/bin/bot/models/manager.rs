@@ -7,7 +7,10 @@ use poise::serenity_prelude::{ComponentInteraction, Http};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
-    models::{dictionary::Dictionary, net::GameMessage},
+    models::{
+        dictionary::Dictionary,
+        net::{GameMessage, KateContext},
+    },
     util::{GameId, LobbyId},
 };
 
@@ -35,17 +38,17 @@ impl Manager {
         }
     }
 
-    /// Tries to create a new lobby with `lobby_id` and `game_id`. Returns
-    /// the receiver for communicating with the lobby. Returns none if there's
-    /// already a lobby with `lobby_id`.
-    pub fn create_lobby(&self, lobby_id: u64, game_id: String) -> Option<Receiver<GameMessage>> {
-        let Entry::Vacant(entry) = self.sessions.entry(lobby_id) else {
+    /// Creates a new lobby and returns the receiver used for communicating
+    /// with it. Fails to create a lobby if the lobby_id associated with context
+    /// already has an associated lobby.
+    pub fn create_lobby(&self, ctx: &KateContext<'_>) -> Option<Receiver<GameMessage>> {
+        let Entry::Vacant(entry) = self.sessions.entry(ctx.lobby_id()) else {
             return None;
         };
 
         const BUFFER_SIZE: usize = 10;
         let (sender, receiver) = mpsc::channel(BUFFER_SIZE);
-        entry.insert((game_id, sender));
+        entry.insert((ctx.id().to_string(), sender));
 
         Some(receiver)
     }

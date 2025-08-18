@@ -1,16 +1,24 @@
 //! This module contains communication models for communicating with lobbies and handling events.
 
-use std::{pin::Pin, sync::Arc, time::Duration};
+use std::{
+    borrow::BorrowMut,
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    sync::Arc,
+    time::Duration,
+};
 
 use poise::{
     BoxFuture,
     serenity_prelude::{
-        ComponentInteraction, ComponentInteractionCollector,
+        ChannelId, ComponentInteraction, ComponentInteractionCollector, CreateAttachment,
+        CreateMessage, Error as SerenityError, Message,
         futures::{Stream, StreamExt},
     },
 };
+use tokio::{sync::mpsc::Receiver, time::timeout};
 
-use crate::models::manager::Manager;
+use crate::{models::manager::Manager, util::LobbyId};
 
 #[derive(Debug)]
 pub struct KateData {
@@ -114,7 +122,7 @@ impl<Context, Request, Provider: self::Provider<Request>, RouteExitT, const N: u
     /// Listen for events from the provider and try to match it to a router.
     /// If an event could be matched to multiple routers, the event will be
     /// passed to the matchable route that was defined first.
-    /// 
+    ///
     /// Returns Some if a router requested ending the listen.
     /// Return None if the provider ended the listen by passing None.
     pub async fn listen(&mut self) -> Option<RouteExitT> {
@@ -201,5 +209,113 @@ impl ComponentInteractionProvider {
 impl Provider<ComponentInteraction> for ComponentInteractionProvider {
     async fn next(&mut self) -> Option<ComponentInteraction> {
         self.stream.next().await
+    }
+}
+
+impl<T> Provider<GameMessage> for T
+where
+    T: BorrowMut<Receiver<GameMessage>>,
+{
+    /// # Warning
+    /// This **always** return Some. When the sender side has been closed
+    /// GameMessage::Close is repeatedly returned
+    async fn next(&mut self) -> Option<GameMessage> {
+        const MAX_TIMEOUT: Duration = Duration::from_secs(120);
+
+        let Ok(msg) = timeout(MAX_TIMEOUT, self.borrow_mut().recv()).await else {
+            return Some(GameMessage::Timeout);
+        };
+        Some(msg.unwrap_or(GameMessage::Close))
+    }
+}
+
+/// Wrapper for storing an underlying context and service.
+pub struct ContextBinder<'a, Context, Service> {
+    pub ctx: &'a mut Context,
+    pub service: &'a mut Service,
+}
+
+impl<Context, Service> Deref for ContextBinder<'_, Context, Service> {
+    type Target = Context;
+
+    fn deref(&self) -> &Self::Target {
+        self.ctx
+    }
+}
+
+impl<Context, Service> DerefMut for ContextBinder<'_, Context, Service> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ctx
+    }
+}
+
+/// Context during a game. Automatically deletes the lobby
+/// from the manager when dropped.
+#[derive(Debug)]
+pub struct GameContext {
+    /// Uniquely identifies this game instance.
+    pub game_id: String,
+    /// The lobby this game is being played in.
+    pub lobby_id: u64,
+    /// Identifies the channel to send messages to.
+    pub channel_id: ChannelId,
+    /// A handle to the manager.
+    pub manager: Arc<Manager>,
+}
+
+impl GameContext {
+    pub fn new(ctx: &KateContext<'_>) -> Self {
+        Self {
+            game_id: ctx.id().to_string(),
+            lobby_id: ctx.lobby_id(),
+            channel_id: ctx.channel_id(),
+            manager: ctx.data().manager.clone(),
+        }
+    }
+
+    /// Sends a text message to the game's channel. Equivalent to using [`Self::send_message`]
+    /// with a [`CreateMessage`] with content set to `message`.
+    pub async fn send_text(&self, message: impl Into<String>) -> Result<Message, SerenityError> {
+        self.send_message(CreateMessage::new().content(message)).await
+    }
+
+    /// Sends a message to the game's channel.
+    pub async fn send_message(&self, message: CreateMessage) -> Result<Message, SerenityError> {
+        self.channel_id
+            .send_message(&self.manager.http, message)
+            .await
+    }
+
+    /// Sends a message and files to the game's channel.
+    pub async fn send_files(
+        &self,
+        message: CreateMessage,
+        files: Vec<CreateAttachment>,
+    ) -> Result<Message, SerenityError> {
+        self.channel_id
+            .send_files(&self.manager.http, files, message)
+            .await
+    }
+}
+
+impl Drop for GameContext {
+    fn drop(&mut self) {
+        self.manager.remove_lobby(self.lobby_id);
+    }
+}
+
+/// This module contains helper matchers for [`Router`] and [`Route`]
+pub mod matcher {
+    use poise::serenity_prelude::ComponentInteraction;
+
+    use crate::models::net::Route;
+
+    /// Matches a ComponentInteraction's `data.custom_id` with `route.path`
+    pub fn full_route_path<Context, ExitT>(
+        route: &Route<Context, ComponentInteraction, ExitT>,
+        _ctx: &Context,
+        event: &ComponentInteraction,
+    ) -> bool {
+        event.data.custom_id == route.path
     }
 }

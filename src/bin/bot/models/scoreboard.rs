@@ -8,8 +8,7 @@ use poise::serenity_prelude::UserId;
 use crate::util::IndexMap;
 
 /// Keeps track of participating players's winrates across rounds
-/// during a game. It is assumed that a round ends and a new one starts
-/// when a win is added to any player.
+/// during a game.
 #[derive(Clone, Debug, Default)]
 pub struct Scoreboard {
     /// Total number of rounds played
@@ -32,15 +31,17 @@ impl Scoreboard {
         self.rounds
     }
 
+    /// Checks if there's at least one participating player.
+    pub fn has_players(&self) -> bool {
+        self.players.iter().any(|_| true)
+    }
+
     pub fn iter(&self) -> slice::Iter<'_, (UserId, ScoreEntry)> {
         self.players.iter()
     }
 
-    /// Records a win for the given user. The total rounds counter is incremented
-    /// due to the assumption that a win means the current round is over.
+    /// Records a win for the given user.
     pub fn add_win(&mut self, user: UserId) {
-        self.rounds += 1;
-
         self.players
             .get_or_insert_with(user, ScoreEntry::default)
             .add_win();
@@ -51,6 +52,11 @@ impl Scoreboard {
         self.players
             .get_or_insert_with(user, ScoreEntry::default)
             .add_loss();
+    }
+
+    /// Increments the round counter.
+    pub fn next_round(&mut self) {
+        self.rounds += 1;
     }
 }
 

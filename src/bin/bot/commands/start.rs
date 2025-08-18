@@ -25,7 +25,10 @@ pub async fn start(
         | ModeChoice::KanToHir
         | ModeChoice::KanToEng
         | ModeChoice::EngToKan => {
-            modes::multi_choice::handler(ctx, mode.try_into().unwrap()).await?
+            modes::multi_choice::handler(ctx, mode).await?
+        },
+        ModeChoice::VerbT => {
+            modes::verb_transitivity::handler(ctx, mode).await?
         }
     }
 
