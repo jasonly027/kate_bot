@@ -245,3 +245,47 @@ pub fn text_to_image(text: &str) -> Vec<u8> {
 
     buf.into_inner()
 }
+
+pub enum RetryResult {
+    /// Action was successful.
+    Success,
+    /// Action failed but there are retries left.
+    Fail,
+    /// Action failed and there are no more retries left.
+    Terminal,
+}
+
+/// Can be used with functions that return a success flag.
+pub struct Retry {
+    tries: u32,
+}
+
+impl Retry {
+    pub fn new() -> Self {
+        Retry { tries: 0 }
+    }
+
+    /// Try a function, returns [`RetryResult::Terminal`] after
+    /// three consecutive fails.
+    pub async fn try_async<F, Fut>(&mut self, f: F) -> RetryResult
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+    {
+        const MAX_TRIES: u32 = 3;
+        if self.tries >= MAX_TRIES {
+            return RetryResult::Terminal;
+        }
+
+        match f().await {
+            true => {
+                self.tries = 0;
+                RetryResult::Success
+            }
+            false => {
+                self.tries += 1;
+                RetryResult::Fail
+            }
+        }
+    }
+}

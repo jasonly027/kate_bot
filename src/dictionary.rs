@@ -20,6 +20,14 @@ pub struct DictEntry {
     pub senses: Vec<Sense>,
 }
 
+impl PartialEq for DictEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for DictEntry {}
+
 impl DictEntry {
     /// Determines whether there is any [reading](`DictEntry::readings`)
     /// or [kanji](`DictEntry::kanjis`) annotated with at least one [`NLevel`]
