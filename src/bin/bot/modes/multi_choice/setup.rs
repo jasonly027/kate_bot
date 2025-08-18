@@ -2,38 +2,49 @@ use poise::CreateReply;
 use tracing::instrument;
 
 use crate::{
-    message::{ids, single_button, string_dropdown},
-    models::net::{KateContext, KateResult},
-    modes::ModeChoice,
+    message::{single_button, string_dropdown},
+    models::net::{ComponentInteractionRouter, ContextBinder, KateContext, KateResult},
+    modes::{
+        ModeChoice,
+        multi_choice::setup::router::{set_filters, set_levels, submit},
+    },
     util::Logging,
 };
 
+type Context<'a, 'b> = ContextBinder<'a, KateContext<'b>, service::Service>;
+
 /// Sets up creating a new multi_choice game.
-#[instrument(level = "warn", skip(ctx, mode), fields(invocation_id = ctx.id()))]
+#[instrument(name = "multi_choice", level = "warn", skip(ctx, mode), fields(invocation_id = ctx.id()))]
 pub async fn handler(mut ctx: KateContext<'_>, mode: ModeChoice) -> KateResult {
     let mut service = service::Service::new(ctx.data().manager.clone(), mode.try_into().unwrap());
+    let mut ctx = Context {
+        ctx: &mut ctx,
+        service: &mut service,
+    };
 
-    let [levels_id, filters_id, submit_id] = ids(ctx.id(), ["lvls", "fltrs", "sbmt"]);
-    let first_reply = CreateReply::default()
-        .components(vec![
-            string_dropdown(&levels_id, &service.levels, "Select NLevel Pool(s)"),
-            string_dropdown(
-                &filters_id,
-                &service.filters,
-                "Select parts-of-speech filters",
-            ),
-            single_button(&submit_id, "Create Game"),
-        ])
-        .ephemeral(true);
+    let mut router = ComponentInteractionRouter::new(ctx.id().to_string())
+        .component(
+            string_dropdown(&ctx.service.levels, "Select NLevel Pool(s)"),
+            |ctx, ev| Box::pin(set_levels(ctx, ev)),
+        )
+        .component(
+            string_dropdown(&ctx.service.filters, "Select parts-of-speech filters"),
+            |ctx, ev| Box::pin(set_filters(ctx, ev)),
+        )
+        .component(single_button("Create Game"), |ctx, ev| {
+            Box::pin(submit(ctx, ev))
+        });
 
-    let reply_handle = ctx.send(first_reply).await.on_err_warn_send_failed()?;
-
-    // Listen and handle interactions on the game setup buttons.
-    router::router(&mut ctx, &mut service, &levels_id, &filters_id, &submit_id)
-        .listen()
-        .await;
-
-    reply_handle.delete(ctx).await.ok();
+    let reply_handle = ctx
+        .send(
+            CreateReply::default()
+                .components(router.take_components())
+                .ephemeral(true),
+        )
+        .await
+        .on_err_warn_send_failed()?;
+    router.listen(&mut ctx).await;
+    reply_handle.delete(*ctx).await.ok();
 
     Ok(())
 }
@@ -46,44 +57,15 @@ mod router {
     use tracing::{error, instrument};
 
     use crate::{
-        models::net::{
-            ComponentInteractionProvider, ContextBinder, KateContext, Route, Router, RoutingResult,
-        },
-        modes::multi_choice::setup::service::Service as SetupService,
+        modes::multi_choice::setup::Context,
         util::{Logging, ParseUnwrapAll},
     };
 
-    type SetupContext<'a, 'b> = ContextBinder<'a, KateContext<'b>, SetupService>;
-
-    pub fn router<'a, 'b>(
-        ctx: &'a mut KateContext<'b>,
-        service: &'a mut SetupService,
-        levels_path: &'a str,
-        filters_path: &'a str,
-        submit_path: &'a str,
-    ) -> Router<SetupContext<'a, 'b>, ComponentInteraction, ComponentInteractionProvider, (), 3>
-    {
-        let provider =
-            ComponentInteractionProvider::new(ctx, &[levels_path, filters_path, submit_path]);
-        let ctx = SetupContext { ctx, service };
-        let routes = [
-            Route::new(levels_path, |ctx, event| Box::pin(set_levels(ctx, event))),
-            Route::new(filters_path, |ctx, event| Box::pin(set_filters(ctx, event))),
-            Route::new(submit_path, |ctx, event| Box::pin(submit(ctx, event))),
-        ];
-
-        Router::new(ctx, provider, routes)
-            .matcher(|route, _ctx, event| event.data.custom_id == route.path)
-    }
-
     #[instrument(level = "warn", skip(ctx, event))]
-    async fn set_levels(
-        ctx: &mut SetupContext<'_, '_>,
-        event: ComponentInteraction,
-    ) -> RoutingResult<()> {
+    pub async fn set_levels(ctx: &mut Context<'_, '_>, event: ComponentInteraction) -> bool {
         let EventKind::StringSelect { values } = &event.data.kind else {
             error!(?event.data.kind, "Expected EventKind::StringSelect");
-            return RoutingResult::Continue;
+            return true;
         };
 
         ctx.service.levels = values.parse_unwrap_all();
@@ -92,18 +74,14 @@ mod router {
             .await
             .on_err_warn_send_failed()
             .ok();
-
-        RoutingResult::Continue
+        true
     }
 
     #[instrument(level = "warn", skip(ctx, event))]
-    async fn set_filters(
-        ctx: &mut SetupContext<'_, '_>,
-        event: ComponentInteraction,
-    ) -> RoutingResult<()> {
+    pub async fn set_filters(ctx: &mut Context<'_, '_>, event: ComponentInteraction) -> bool {
         let EventKind::StringSelect { values } = &event.data.kind else {
             error!(?event.data.kind, "Expected EventKind::StringSelect");
-            return RoutingResult::Continue;
+            return true;
         };
 
         ctx.service.filters = values.parse_unwrap_all();
@@ -112,18 +90,14 @@ mod router {
             .await
             .on_err_warn_send_failed()
             .ok();
-
-        RoutingResult::Continue
+        true
     }
 
     #[instrument(level = "warn", skip(ctx, event))]
-    async fn submit(
-        ctx: &mut SetupContext<'_, '_>,
-        event: ComponentInteraction,
-    ) -> RoutingResult<()> {
+    pub async fn submit(ctx: &mut Context<'_, '_>, event: ComponentInteraction) -> bool {
         let EventKind::Button = &event.data.kind else {
             error!(?event.data.kind, "Expected EventKind::Button");
-            return RoutingResult::Continue;
+            return true;
         };
 
         let msg = CreateInteractionResponse::Message(
@@ -138,16 +112,13 @@ mod router {
             .ok();
 
         let success = ctx.service.submit(ctx);
-
-        // On successful game creation, tell router to stop listening.
         if success {
             event
                 .delete_response(**ctx)
                 .await
                 .on_err_warn("Delete creating game message failed")
                 .ok();
-
-            RoutingResult::Exit(())
+            false
         } else {
             event
                 .edit_response(
@@ -158,8 +129,7 @@ mod router {
                 .await
                 .on_err_warn("Edit creating game message failed")
                 .ok();
-
-            RoutingResult::Continue
+            true
         }
     }
 }
@@ -216,14 +186,12 @@ mod service {
 
             tokio::spawn({
                 let ctx = GameContext::new(ctx);
-
-                let dictionary = self.manager.dictionary.clone();
                 let settings = GameSettings {
                     mode: self.mode,
                     levels: self.levels.clone(),
                     filters: self.filters.clone(),
                 };
-                let service = game_service::Service::new(dictionary, settings);
+                let service = game_service::Service::new(self.manager.dictionary.clone(), settings);
 
                 async move {
                     game_router::handler(ctx, service, receiver).await;
