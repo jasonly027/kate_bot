@@ -20,17 +20,25 @@ use crate::{
     util,
 };
 
-/// Prepends "{root_id}-" to each item in `items`.
-pub fn ids<const N: usize>(root_id: u64, items: [&str; N]) -> [String; N] {
-    items.map(|item| format!("{root_id}-{item}"))
+pub fn single_button<T: Into<String>>(
+    label: impl Into<String>,
+) -> impl FnOnce(T) -> CreateActionRow {
+    |id| _single_button(id, label)
 }
 
-pub fn single_button(id: impl Into<String>, label: impl Into<String>) -> CreateActionRow {
+fn _single_button(id: impl Into<String>, label: impl Into<String>) -> CreateActionRow {
     let btn = CreateButton::new(id).label(label);
     CreateActionRow::Buttons(vec![btn])
 }
 
-pub fn string_dropdown<T: Display>(
+pub fn string_dropdown<T: Display, I: Into<String>>(
+    options: &[T],
+    placeholder: &str,
+) -> impl Fn(I) -> CreateActionRow {
+    |id| _string_dropdown(id, options, placeholder)
+}
+
+fn _string_dropdown<T: Display>(
     id: impl Into<String>,
     options: &[T],
     placeholder: &str,

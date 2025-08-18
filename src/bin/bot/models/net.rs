@@ -1,9 +1,10 @@
 //! This module contains communication models for communicating with lobbies and handling events.
 
 use std::{
-    borrow::BorrowMut,
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    mem,
     ops::{Deref, DerefMut},
-    pin::Pin,
     sync::Arc,
     time::Duration,
 };
@@ -11,9 +12,8 @@ use std::{
 use poise::{
     BoxFuture,
     serenity_prelude::{
-        ChannelId, ComponentInteraction, ComponentInteractionCollector, CreateAttachment,
-        CreateMessage, Error as SerenityError, Message,
-        futures::{Stream, StreamExt},
+        ChannelId, ComponentInteraction, ComponentInteractionCollector, CreateActionRow,
+        CreateAttachment, CreateMessage, Error as SerenityError, Message, futures::StreamExt,
     },
 };
 use tokio::{sync::mpsc::Receiver, time::timeout};
@@ -42,176 +42,95 @@ pub enum GameMessage {
     Timeout,
 }
 
-/// Describes to a router what action to take next.
-pub enum RoutingResult<T> {
-    /// Continue listening from the provider and passing to routes.
-    Continue,
-    /// Stop listening. This also contains a value from the route that
-    /// requested an exit.
-    Exit(T),
-}
+/// The handler to dispatch a ComponentInteraction event to.
+pub type ComponentInteractionHandler<Context> =
+    for<'a> fn(&'a mut Context, ComponentInteraction) -> BoxFuture<'a, bool>;
 
-type RouterMatcher<Context, Request, RouteExitT> =
-    fn(&Route<Context, Request, RouteExitT>, &Context, &Request) -> bool;
-
-/// Listens for events from provider, optionally validates events, and passes it to a route using
-/// matching rules.
-pub struct Router<Context, Request, Provider: self::Provider<Request>, RouteExitT, const N: usize> {
-    /// Context data to be passed to each route.
-    ctx: Context,
-    /// Router level matcher for determining if event should be passed to a route.
-    /// If a route defines its own matcher, that's used instead.
-    matcher: Option<RouterMatcher<Context, Request, RouteExitT>>,
-    /// Validate an event before trying to match.
-    validator: Option<fn(&Context, &Request) -> bool>,
-    /// Source of events.
-    provider: Provider,
-    /// Eligible routes to pass events to.
-    routes: [Route<Context, Request, RouteExitT>; N],
-}
-
-impl<Context, Request, Provider: self::Provider<Request>, RouteExitT, const N: usize>
-    Router<Context, Request, Provider, RouteExitT, N>
+/// Registers components and their handlers and routes them
+/// appropriately on [`Self::listen`]
+#[derive(Debug, Default)]
+pub struct ComponentInteractionRouter<'a, Context>
+where
+    Context: BorrowMut<KateContext<'a>>,
 {
-    pub fn new(
-        ctx: Context,
-        provider: Provider,
-        routes: [Route<Context, Request, RouteExitT>; N],
-    ) -> Self {
+    id: String,
+    ids: Vec<String>,
+    components: Vec<CreateActionRow>,
+    handlers: Vec<ComponentInteractionHandler<Context>>,
+    _marker: PhantomData<&'a ()>,
+}
+
+impl<'a, Context> ComponentInteractionRouter<'a, Context>
+where
+    Context: BorrowMut<KateContext<'a>>,
+{
+    /// Creates a new router. `id` is used as the root
+    /// for each registered component's id.
+    pub fn new(id: impl Into<String>) -> Self {
         Self {
-            ctx,
-            matcher: None,
-            validator: None,
-            provider,
-            routes,
+            id: id.into(),
+            ids: Default::default(),
+            components: Default::default(),
+            handlers: Default::default(),
+            _marker: Default::default(),
         }
     }
 
-    /// Sets the router-level matcher.
-    /// Note: A route's own matcher takes precedence in usage if it exists.
-    pub fn matcher(
+    /// Registers a new component and its handler.
+    pub fn component(
         mut self,
-        matcher: fn(&Route<Context, Request, RouteExitT>, &Context, &Request) -> bool,
+        component: impl FnOnce(String) -> CreateActionRow,
+        handler: ComponentInteractionHandler<Context>,
     ) -> Self {
-        self.matcher = Some(matcher);
+        self.ids
+            .push(format!("{}-{}", self.id, self.components.len()));
+        self.components
+            .push(component(self.ids.last().expect("we just pushed").clone()));
+        self.handlers.push(handler);
+
         self
     }
 
-    fn matches(&self, route: &Route<Context, Request, RouteExitT>, event: &Request) -> bool {
-        if let Some(matcher) = route.matcher {
-            matcher(route, &self.ctx, event)
-        } else if let Some(matcher) = self.matcher {
-            matcher(route, &self.ctx, event)
-        } else {
-            false
-        }
+    /// Returns all registered components so they can be used in
+    /// a message. This takes from the internal component store leaving
+    /// it empty, so an immediate subsequent call would result
+    /// in an empty Vec.
+    pub fn take_components(&mut self) -> Vec<CreateActionRow> {
+        mem::take(&mut self.components)
     }
 
-    // Sets the validator.
-    #[allow(dead_code)]
-    pub fn validator(mut self, validator: fn(&Context, &Request) -> bool) -> Self {
-        self.validator = Some(validator);
-        self
-    }
+    /// Blocks and listens for component interactions to route.
+    /// If a handler returns false, listening is stopped prematurely.
+    pub async fn listen(&mut self, ctx: &mut Context) {
+        let kctx: &mut KateContext<'_> = ctx.borrow_mut();
 
-    fn validate(&self, event: &Request) -> bool {
-        self.validator
-            .map(|validate| validate(&self.ctx, event))
-            .unwrap_or(true)
-    }
+        const MAX_TIMEOUT: Duration = Duration::from_secs(60);
+        let mut collector = ComponentInteractionCollector::new(&kctx)
+            .author_id(kctx.author().id)
+            .channel_id(kctx.channel_id())
+            .timeout(MAX_TIMEOUT)
+            .stream();
 
-    /// Listen for events from the provider and try to match it to a router.
-    /// If an event could be matched to multiple routers, the event will be
-    /// passed to the matchable route that was defined first.
-    ///
-    /// Returns Some if a router requested ending the listen.
-    /// Return None if the provider ended the listen by passing None.
-    pub async fn listen(&mut self) -> Option<RouteExitT> {
-        while let Some(event) = self.provider.next().await {
-            if !self.validate(&event) {
-                continue;
-            }
-
-            let Some(route) = self.routes.iter().find(|route| self.matches(route, &event)) else {
+        while let Some(ev) = collector.next().await {
+            let Some(handler) = self
+                .ids
+                .iter()
+                .position(|id| *id == ev.data.custom_id)
+                .map(|id| self.handlers[id])
+            else {
                 continue;
             };
 
-            match (route.handle)(&mut self.ctx, event).await {
-                RoutingResult::Continue => {}
-                RoutingResult::Exit(val) => return Some(val),
+            if !handler(ctx, ev).await {
+                return;
             }
         }
-        None
-    }
-}
-
-/// A route that an event can be passed to.
-pub struct Route<Context, Request, ExitT> {
-    /// Identifier for the route. This could be an empty string and there would be no
-    /// problems, but a unique tag could be used for match rules if desired.
-    /// Uniqueness is not automatically checked by [`Router`].
-    pub path: String,
-    /// The handler that is called with context and event given by the router.
-    handle: for<'a> fn(&'a mut Context, Request) -> BoxFuture<'a, RoutingResult<ExitT>>,
-    /// Route level matcher for determining if event should be passed to this route.
-    /// If defined, it will be used instead of a router level matcher.
-    matcher: Option<fn(&Self, &Context, &Request) -> bool>,
-}
-
-impl<Context, Request, ExitT> Route<Context, Request, ExitT> {
-    pub fn new(
-        path: impl Into<String>,
-        handle: for<'a> fn(&'a mut Context, Request) -> BoxFuture<'a, RoutingResult<ExitT>>,
-    ) -> Self {
-        Self {
-            path: path.into(),
-            handle,
-            matcher: None,
-        }
-    }
-
-    /// Sets the matcher. This matcher will take precedence in usage over a
-    /// router level matcher.
-    #[allow(dead_code)]
-    pub fn matcher(mut self, matcher: fn(&Self, &Context, &Request) -> bool) -> Self {
-        self.matcher = Some(matcher);
-        self
     }
 }
 
 pub trait Provider<T> {
     /// Gets the next event. Returns None if there are no more events.
     async fn next(&mut self) -> Option<T>;
-}
-
-/// Wraps [`ComponentInteractionCollector`]
-pub struct ComponentInteractionProvider {
-    stream: Pin<Box<dyn Stream<Item = ComponentInteraction> + Send>>,
-}
-
-impl ComponentInteractionProvider {
-    pub fn new(ctx: &KateContext<'_>, target_ids: &[impl Into<String> + Clone]) -> Self {
-        const MAX_TIMEOUT: Duration = Duration::from_secs(60);
-
-        let target_ids: Vec<String> = target_ids.iter().cloned().map(Into::into).collect();
-
-        let collector = ComponentInteractionCollector::new(ctx)
-            .author_id(ctx.author().id)
-            .channel_id(ctx.channel_id())
-            .timeout(MAX_TIMEOUT)
-            .filter(move |ev| target_ids.contains(&ev.data.custom_id))
-            .stream();
-
-        Self {
-            stream: Box::pin(collector),
-        }
-    }
-}
-
-impl Provider<ComponentInteraction> for ComponentInteractionProvider {
-    async fn next(&mut self) -> Option<ComponentInteraction> {
-        self.stream.next().await
-    }
 }
 
 impl<T> Provider<GameMessage> for T
@@ -251,6 +170,18 @@ impl<Context, Service> DerefMut for ContextBinder<'_, Context, Service> {
     }
 }
 
+impl<Context, Service> Borrow<Context> for ContextBinder<'_, Context, Service> {
+    fn borrow(&self) -> &Context {
+        self.ctx
+    }
+}
+
+impl<Context, Service> BorrowMut<Context> for ContextBinder<'_, Context, Service> {
+    fn borrow_mut(&mut self) -> &mut Context {
+        self.ctx
+    }
+}
+
 /// Context during a game. Automatically deletes the lobby
 /// from the manager when dropped.
 #[derive(Debug)]
@@ -278,7 +209,8 @@ impl GameContext {
     /// Sends a text message to the game's channel. Equivalent to using [`Self::send_message`]
     /// with a [`CreateMessage`] with content set to `message`.
     pub async fn send_text(&self, message: impl Into<String>) -> Result<Message, SerenityError> {
-        self.send_message(CreateMessage::new().content(message)).await
+        self.send_message(CreateMessage::new().content(message))
+            .await
     }
 
     /// Sends a message to the game's channel.
@@ -303,21 +235,5 @@ impl GameContext {
 impl Drop for GameContext {
     fn drop(&mut self) {
         self.manager.remove_lobby(self.lobby_id);
-    }
-}
-
-/// This module contains helper matchers for [`Router`] and [`Route`]
-pub mod matcher {
-    use poise::serenity_prelude::ComponentInteraction;
-
-    use crate::models::net::Route;
-
-    /// Matches a ComponentInteraction's `data.custom_id` with `route.path`.
-    pub fn full_route_path<Context, ExitT>(
-        route: &Route<Context, ComponentInteraction, ExitT>,
-        _ctx: &Context,
-        event: &ComponentInteraction,
-    ) -> bool {
-        event.data.custom_id == route.path
     }
 }
