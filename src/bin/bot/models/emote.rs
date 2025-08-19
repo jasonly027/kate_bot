@@ -62,6 +62,7 @@ lazy_static! {
 }
 
 pub struct Thumbnail<'a> {
+    pub correct: &'a str,
     pub wat: &'a str,
     pub maji: &'a str,
     pub ee: &'a str,
@@ -73,6 +74,7 @@ pub struct Thumbnail<'a> {
 }
 
 pub const THUMBNAIL: Thumbnail = Thumbnail {
+    correct: "https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png",
     wat: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/wat.png",
     maji: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/maji.png",
     ee: "https://raw.githubusercontent.com/jasonly027/kate_bot/342cff92b1b88de2482542bd4945ad649b280ed2/assets/ee.png",

@@ -1,13 +1,14 @@
 use poise::serenity_prelude::{
-    ButtonStyle, ComponentInteraction, ComponentInteractionDataKind as EventKind, CreateActionRow,
-    CreateEmbed, CreateInteractionResponse, CreateMessage, EditMessage,
+    ComponentInteraction, ComponentInteractionDataKind as EventKind, CreateEmbed,
+    CreateInteractionResponse, CreateMessage, EditMessage,
 };
 use tokio::sync::mpsc::Receiver;
 use tracing::{error, instrument};
 
 use crate::{
-    message::{self, prompt_embed, prompt_image, scoreboard_embed},
+    message::{choice_buttons, prompt_embed, prompt_image, scoreboard_embed},
     models::{
+        emote,
         net::{GameContext, GameMessage, Provider},
         question::Question,
     },
@@ -91,7 +92,7 @@ async fn handle_event(
         return;
     };
 
-    service.select_choice(event.user.id, choice);
+    let correct = service.select_choice(event.user.id, choice);
 
     event
         .create_response(&ctx.manager.http, CreateInteractionResponse::Acknowledge)
@@ -100,7 +101,10 @@ async fn handle_event(
         .ok();
     event
         .message
-        .edit(&ctx.manager.http, prompt_edit(&ctx.game_id, service))
+        .edit(
+            &ctx.manager.http,
+            prompt_edit(&ctx.game_id, service, correct),
+        )
         .await
         .on_err_warn("Send prompt edit failed")
         .ok();
@@ -143,28 +147,22 @@ fn prompt_msg(
         .components(choice_buttons(game_id, round, question))
 }
 
-fn prompt_edit(game_id: &str, service: &GameService) -> EditMessage {
+fn prompt_edit(game_id: &str, service: &GameService, correct: bool) -> EditMessage {
     let round = service.round();
     let question = service.question().unwrap();
     EditMessage::new()
         .add_embed(prompt_embed(round, ModeChoice::VerbT))
-        .add_embed(answer_embed(question))
+        .add_embed(answer_embed(question, correct))
         .components(choice_buttons(game_id, round, question))
 }
 
-fn choice_buttons(game_id: &str, round: u32, question: &Question<2>) -> Vec<CreateActionRow> {
-    let mut buttons = message::choice_buttons(game_id, round, question);
-
-    if let CreateActionRow::Buttons(buttons) = buttons.first_mut().unwrap() {
-        buttons[0] = buttons[0].clone().style(ButtonStyle::Primary);
-        buttons[1] = buttons[1].clone().style(ButtonStyle::Danger);
-    }
-
-    buttons
-}
-
-fn answer_embed<const N: usize>(question: &Question<N>) -> CreateEmbed {
-    const THUMBNAIL: &str = r"https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png";
+fn answer_embed<const N: usize>(question: &Question<N>, correct: bool) -> CreateEmbed {
+    // const thumbnail: &str = r"https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png";
+    let thumbnail = if correct {
+        emote::THUMBNAIL.correct
+    } else {
+        emote::random_insult().thumbnail_url
+    };
     let header = format!("{} {:?}", question.answer(), question.difficulty());
     let body = format!(
         "[**Definition ・ 意味**](https://jisho.org/search/{})",
@@ -173,6 +171,6 @@ fn answer_embed<const N: usize>(question: &Question<N>) -> CreateEmbed {
 
     CreateEmbed::new()
         .title("Answer · 正解")
-        .thumbnail(THUMBNAIL)
+        .thumbnail(thumbnail)
         .field(header, body, false)
 }
