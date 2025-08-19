@@ -4,7 +4,7 @@ use image::{ImageBuffer, Luma};
 use poise::serenity_prelude::{ComponentInteraction, GuildId};
 use rusttype::{Font, Scale, point};
 use std::fmt::Display;
-use std::slice;
+use std::{mem, slice};
 use std::{fmt::Debug, process, str::FromStr};
 use std::{io::Cursor, sync::LazyLock};
 use tracing::{error, warn};
@@ -142,17 +142,43 @@ impl<K: Eq, V> IndexMap<K, V> {
             .map(|entry| &entry.1)
     }
 
+    /// Checks if the key exists in the map.
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.0.iter().any(|entry| &entry.0 == key)
+    }
+
+    /// Removes a value in the map using `key` and returns it.
+    #[allow(dead_code)]
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        self.0
+            .iter()
+            .position(|entry| entry.0 == *key)
+            .map(|idx| self.0.swap_remove(idx).1)
+    }
+
     pub fn iter(&self) -> slice::Iter<'_, (K, V)> {
         self.0.iter()
     }
 
-    /// Inserts a key value pair into the map. Replaces value if key already
-    /// exists.
+    /// Gets the number of entries in the map.
     #[allow(dead_code)]
-    pub fn insert(&mut self, (key, value): (K, V)) {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Inserts a key value pair into the map. Replaces value if key already
+    /// exists. Returns the original value.
+    #[allow(dead_code)]
+    pub fn insert(&mut self, (key, value): (K, V)) -> Option<V> {
         match self.0.iter_mut().find(|entry| entry.0 == key) {
-            Some(entry) => entry.1 = value,
-            None => self.0.push((key, value)),
+            Some(entry) => {
+                let prev = mem::replace(&mut entry.1, value);
+                Some(prev)
+            }
+            None => {
+                self.0.push((key, value));
+                None
+            },
         }
     }
 

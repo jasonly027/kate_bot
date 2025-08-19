@@ -12,14 +12,12 @@ RUN cargo fetch
 
 COPY . .
 
-RUN cargo build --target x86_64-unknown-linux-musl --release --bin dict_combine 
+RUN cargo run --target x86_64-unknown-linux-musl --release --bin dict_combine -- ./content/ --overwrite
 
-RUN ./target/x86_64-unknown-linux-musl/release/dict_combine ./content/ --overwrite
-
-RUN cargo install --target x86_64-unknown-linux-musl --path . --bin kate_bot
+RUN cargo install --target x86_64-unknown-linux-musl --path . --bin bot
 
 FROM scratch
 
-COPY --from=builder /usr/local/cargo/bin/kate_bot .
+COPY --from=builder /usr/local/cargo/bin/bot .
 
-CMD [ "./kate_bot" ]
+CMD [ "./bot" ]

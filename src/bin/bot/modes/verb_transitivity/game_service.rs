@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use kate_bot::dictionary::NLevel;
 use poise::serenity_prelude::UserId;
@@ -9,38 +9,48 @@ use rand::{
 
 use crate::{
     models::{
+        dictionary::Dictionary,
         question::{self},
         scoreboard::Scoreboard,
     },
-    modes::verb_transitivity::tverbs::TVerbPair,
+    modes::verb_transitivity::tverbs::{TVerbPooledPair, tverb_pooled_pairs},
 };
 
 type Question = question::Question<2>;
 
+static TVERBS: OnceLock<Vec<Arc<TVerbPooledPair>>> = OnceLock::new();
+
+fn tverbs(dictionary: &Dictionary) -> &'static [Arc<TVerbPooledPair>] {
+    TVERBS.get_or_init(|| {
+        tverb_pooled_pairs(dictionary)
+            .into_iter()
+            .map(Arc::new)
+            .collect()
+    })
+}
+
 pub struct Service {
-    tverbs: Vec<Arc<TVerbPair>>,
+    tverbs: Vec<Arc<TVerbPooledPair>>,
     levels: Vec<NLevel>,
     question: Option<Question>,
     scoreboard: Scoreboard,
 }
 
 impl Service {
-    pub fn new(tverbs: &[Arc<TVerbPair>], levels: Vec<NLevel>) -> Self {
-        let mut tverbs: Vec<Arc<TVerbPair>> = tverbs
+    pub fn new(dictionary: &Dictionary, levels: Vec<NLevel>) -> Self {
+        let mut tverbs: Vec<Arc<TVerbPooledPair>> = tverbs(dictionary)
             .iter()
             .filter(|tverb| {
                 tverb
-                    .intrans
-                    .1
+                    .intrans_entry()
                     .levels()
                     .iter()
-                    .all(|lvl| levels.contains(lvl))
-                    && tverb
-                        .trans
-                        .1
+                    .any(|lvl| levels.contains(lvl))
+                    || tverb
+                        .trans_entry()
                         .levels()
                         .iter()
-                        .all(|lvl| levels.contains(lvl))
+                        .any(|lvl| levels.contains(lvl))
             })
             .cloned()
             .collect();
@@ -83,20 +93,16 @@ impl Service {
             return false;
         };
 
-        let correct = choice == question.answer_idx();
         // Game is 50/50, so mark all choices guessed after the first try.
         question.guess(question.answer_idx());
-        if correct {
-            self.scoreboard.add_win(user);
-        } else {
-            self.scoreboard.add_loss(user);
-        }
 
+        let correct = choice == question.answer_idx();
+        self.scoreboard.record(user, correct);
         correct
     }
 }
 
-fn make_question(pair: &TVerbPair) -> Question {
+fn make_question(pair: &TVerbPooledPair) -> Question {
     if rng().random_bool(0.5) {
         make_intrans(pair)
     } else {
@@ -104,45 +110,42 @@ fn make_question(pair: &TVerbPair) -> Question {
     }
 }
 
-fn make_intrans(pair: &TVerbPair) -> Question {
-    let intrans_wrd = &pair.intrans.0;
-    let trans_wrd = &pair.trans.0;
-
-    let prompt = "A が ___".to_string();
-
-    let choices = [intrans_wrd.clone(), trans_wrd.clone()];
+fn make_intrans(pair: &TVerbPooledPair) -> Question {
+    let prompt = format!(
+        "{} が ___",
+        pair.intrans_nouns().choose(&mut rng()).unwrap()
+    );
+    let choices = make_choices(pair);
     let answer = 0;
-
-    let difficulty = pair.intrans.1.levels();
+    let difficulty = pair.intrans_entry().levels();
 
     Question::new(prompt, choices, answer, difficulty).unwrap()
 }
 
-fn make_trans(pair: &TVerbPair) -> Question {
-    let trans_wrd = &pair.trans.0;
-    let intrans_wrd = &pair.intrans.0;
-
+fn make_trans(pair: &TVerbPooledPair) -> Question {
     let prompt = format!(
         "{} {} {} を ___",
-        random_person(),
+        pair.trans_subjects().choose(&mut rng()).unwrap(),
         ["が", "は"].choose(&mut rng()).unwrap(),
-        random_object()
+        pair.trans_nouns().choose(&mut rng()).unwrap(),
     );
-
-    let choices = [intrans_wrd.clone(), trans_wrd.clone()];
+    let choices = make_choices(pair);
     let answer = 1;
-
-    let difficulty = pair.trans.1.levels();
+    let difficulty = pair.trans_entry().levels();
 
     Question::new(prompt, choices, answer, difficulty).unwrap()
 }
 
-fn random_person() -> &'static str {
-    const PEOPLE: [&str; 1] = ["Bob"];
-    PEOPLE.choose(&mut rng()).unwrap()
-}
+fn make_choices(pair: &TVerbPooledPair) -> [String; 2] {
+    let intrans = match pair.intrans_entry().readings.first() {
+        Some(hir) => format!("{} ({})", pair.intrans_kanji(), hir.text),
+        None => pair.intrans_kanji().to_string(),
+    };
 
-fn random_object() -> &'static str {
-    const OBJECTS: [&str; 1] = ["apple"];
-    OBJECTS.choose(&mut rng()).unwrap()
+    let trans = match pair.trans_entry().readings.first() {
+        Some(hir) => format!("{} ({})", pair.trans_kanji(), hir.text),
+        None => pair.trans_kanji().to_string(),
+    };
+
+    [intrans, trans]
 }

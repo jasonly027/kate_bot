@@ -1,5 +1,3 @@
-use std::sync::{Arc, OnceLock};
-
 use poise::CreateReply;
 use tracing::instrument;
 
@@ -8,31 +6,17 @@ use crate::{
     models::net::{ComponentInteractionRouter, ContextBinder, KateContext, KateResult},
     modes::{
         ModeChoice,
-        verb_transitivity::{
-            setup::router::{set_levels, submit},
-            tverbs::{TVerbPair, tverb_pairs},
-        },
+        verb_transitivity::setup::router::{set_levels, submit},
     },
     util::Logging,
 };
 
-type Context<'a, 'b, 'c> = ContextBinder<'a, KateContext<'b>, service::Service<'c>>;
-
-static TVERBS: OnceLock<Vec<Arc<TVerbPair>>> = OnceLock::new();
-
-fn tverbs(ctx: &KateContext<'_>) -> &'static [Arc<TVerbPair>] {
-    TVERBS.get_or_init(|| {
-        tverb_pairs(&ctx.data().manager.dictionary)
-            .into_iter()
-            .map(Arc::new)
-            .collect()
-    })
-}
+type Context<'a, 'b, 'c> = ContextBinder<'a, KateContext<'b>, service::Service>;
 
 // Sets up creating a verb transitivity game.
 #[instrument(name = "verb_transitivity", level = "warn", skip(ctx, _mode), fields(invocation_id = ctx.id()))]
 pub async fn handler(mut ctx: KateContext<'_>, _mode: ModeChoice) -> KateResult {
-    let mut service = service::Service::new(ctx.data().manager.clone(), tverbs(&ctx));
+    let mut service = service::Service::new(ctx.data().manager.clone());
     let mut ctx = Context {
         ctx: &mut ctx,
         service: &mut service,
@@ -142,20 +126,18 @@ mod service {
             manager::Manager,
             net::{GameContext, KateContext},
         },
-        modes::verb_transitivity::{game_router, game_service, tverbs::TVerbPair},
+        modes::verb_transitivity::{game_router, game_service},
     };
 
-    pub struct Service<'a> {
+    pub struct Service {
         manager: Arc<Manager>,
-        tverbs: &'a [Arc<TVerbPair>],
         pub levels: Vec<NLevel>,
     }
 
-    impl<'a> Service<'a> {
-        pub fn new(manager: Arc<Manager>, tverbs: &'a [Arc<TVerbPair>]) -> Self {
+    impl Service {
+        pub fn new(manager: Arc<Manager>) -> Self {
             Self {
                 manager,
-                tverbs,
                 levels: NLevel::iter().collect(),
             }
         }
@@ -172,7 +154,8 @@ mod service {
 
             tokio::spawn({
                 let ctx = GameContext::new(ctx);
-                let service = game_service::Service::new(self.tverbs, self.levels.clone());
+                let service =
+                    game_service::Service::new(&self.manager.dictionary, self.levels.clone());
 
                 async move {
                     game_router::handler(ctx, service, receiver).await;

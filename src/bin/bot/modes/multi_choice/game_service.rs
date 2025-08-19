@@ -112,12 +112,7 @@ impl Service {
         };
 
         let correct = question.guess(choice);
-        if correct {
-            self.scoreboard.add_win(user);
-        } else {
-            self.scoreboard.add_loss(user);
-        }
-
+        self.scoreboard.record(user, correct);
         correct
     }
 
