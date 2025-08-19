@@ -204,7 +204,6 @@ fn correct_edit(game_id: &str, name: &str, service: &GameService) -> EditMessage
 }
 
 fn answer_embed<const N: usize>(name: &str, question: &Question<N>) -> CreateEmbed {
-    const THUMBNAIL: &str = r"https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png";
     let header = format!("{} {:?}", question.answer(), question.difficulty());
     let body = format!(
         "[**Definition ・ 意味**](https://jisho.org/search/{})\n{} {}",
@@ -215,7 +214,7 @@ fn answer_embed<const N: usize>(name: &str, question: &Question<N>) -> CreateEmb
 
     CreateEmbed::new()
         .title("Answer · 正解")
-        .thumbnail(THUMBNAIL)
+        .thumbnail(emote::THUMBNAIL.correct)
         .field(header, body, false)
 }
 
