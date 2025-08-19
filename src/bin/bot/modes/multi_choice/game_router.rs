@@ -40,7 +40,7 @@ pub async fn handler(
                 .await
                 .on_err_warn("Send pool exhausted failed")
                 .ok();
-            break;
+            break 'game;
         };
 
         // Send the round prompt with retries.

@@ -40,18 +40,11 @@ impl Scoreboard {
         self.players.iter()
     }
 
-    /// Records a win for the given user.
-    pub fn add_win(&mut self, user: UserId) {
+    /// Records a win or loss for the given user.
+    pub fn record(&mut self, user: UserId, win: bool) {
         self.players
             .get_or_insert_with(user, ScoreEntry::default)
-            .add_win();
-    }
-
-    /// Records a loss for the given user.
-    pub fn add_loss(&mut self, user: UserId) {
-        self.players
-            .get_or_insert_with(user, ScoreEntry::default)
-            .add_loss();
+            .record(win);
     }
 
     /// Increments the round counter.
@@ -105,13 +98,12 @@ impl ScoreEntry {
         self.wins as f64 / self.attempts() as f64
     }
 
-    /// Adds a win to the score.
-    pub fn add_win(&mut self) {
-        self.wins += 1;
-    }
-
-    /// Adds a loss to the score.
-    pub fn add_loss(&mut self) {
-        self.losses += 1;
+    /// Adds a win or loss to score.
+    pub fn record(&mut self, win: bool) {
+        if win {
+            self.wins += 1;
+        } else {
+            self.losses += 1;
+        }
     }
 }
