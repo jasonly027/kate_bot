@@ -109,7 +109,7 @@ pub fn tverb_pooled_pairs(dictionary: &Dictionary) -> Vec<TVerbPooledPair> {
     let pairs = tverb_pairs(dictionary);
     let pools = context_pools();
 
-    let res = pairs
+    let mut res = pairs
         .into_iter()
         .filter_map(|pair| {
             let key = (
@@ -139,9 +139,33 @@ pub fn tverb_pooled_pairs(dictionary: &Dictionary) -> Vec<TVerbPooledPair> {
                 trans_subjects,
             })
         })
-        .collect();
+        .collect::<Vec<TVerbPooledPair>>();
+
+    apply_manual_changes(&mut res);
 
     res
+}
+
+struct ManualChange {
+    intrans_id: u32,
+    trans_id: u32,
+    apply: fn(&mut TVerbPooledPair),
+}
+
+const MANUAL_CHANGES: [ManualChange; 1] = [ManualChange {
+    intrans_id: 1593430,
+    trans_id: 1170650,
+    apply: |p| p.pair.intrans.0 = "籠る".to_string(),
+}];
+
+fn apply_manual_changes(pairs: &mut [TVerbPooledPair]) {
+    for pair in pairs {
+        if let Some(ManualChange { apply, .. }) = MANUAL_CHANGES.iter().find(|change| {
+            change.intrans_id == pair.intrans_entry().id && change.trans_id == pair.trans_entry().id
+        }) {
+            apply(pair);
+        }
+    }
 }
 
 /// Collects transitivity verb pairs from `dictionary`.

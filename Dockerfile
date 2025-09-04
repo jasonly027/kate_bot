@@ -1,8 +1,6 @@
-FROM rust:1.87.0 as builder
+FROM rust:1.89-alpine3.20 as builder
 
-RUN apt-get update && apt-get install -y musl-tools
-
-RUN rustup target add x86_64-unknown-linux-musl
+RUN apk add musl-dev
 
 WORKDIR /usr/src/app
 
@@ -12,9 +10,9 @@ RUN cargo fetch
 
 COPY . .
 
-RUN cargo run --target x86_64-unknown-linux-musl --release --bin dict_combine -- ./content/ --overwrite
+RUN cargo run --release --bin dict_combine -- ./content/ --overwrite
 
-RUN cargo install --target x86_64-unknown-linux-musl --path . --bin bot
+RUN cargo install --path . --bin bot
 
 FROM scratch
 

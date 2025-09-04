@@ -36,7 +36,7 @@ pub async fn handler(
         // Get the round's question or end the game if there are no more left.
         service.next_round();
         let Some(question) = service.question() else {
-            ctx.send_text("There are no more words left in the pool...")
+            ctx.send_text("All unique words expended.")
                 .await
                 .on_err_warn("Send pool exhausted failed")
                 .ok();

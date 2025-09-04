@@ -28,7 +28,7 @@ pub async fn handler(
         // Get the round's question or end the game if there are no more left.
         service.next_round();
         let Some(question) = service.question() else {
-            ctx.send_text("There are no more words left in the pool...")
+            ctx.send_text("All unique words expended.")
                 .await
                 .on_err_warn("Send pool exhausted failed")
                 .ok();
@@ -103,7 +103,7 @@ async fn handle_event(
         .message
         .edit(
             &ctx.manager.http,
-            prompt_edit(&ctx.game_id, service, correct),
+            prompt_edit(&ctx.game_id, service, &event.user.name, correct),
         )
         .await
         .on_err_warn("Send prompt edit failed")
@@ -147,17 +147,16 @@ fn prompt_msg(
         .components(choice_buttons(game_id, round, question))
 }
 
-fn prompt_edit(game_id: &str, service: &GameService, correct: bool) -> EditMessage {
+fn prompt_edit(game_id: &str, service: &GameService, name: &str, correct: bool) -> EditMessage {
     let round = service.round();
     let question = service.question().unwrap();
     EditMessage::new()
         .add_embed(prompt_embed(round, ModeChoice::VerbT))
-        .add_embed(answer_embed(question, correct))
+        .add_embed(answer_embed(name, question, correct))
         .components(choice_buttons(game_id, round, question))
 }
 
-fn answer_embed<const N: usize>(question: &Question<N>, correct: bool) -> CreateEmbed {
-    // const thumbnail: &str = r"https://raw.githubusercontent.com/jasonly027/kate_bot/dedaa826e9bbc942cf035ba8eeac15479e8d9416/assets/correct.png";
+fn answer_embed<const N: usize>(name: &str, question: &Question<N>, correct: bool) -> CreateEmbed {
     let thumbnail = if correct {
         emote::THUMBNAIL.correct
     } else {
@@ -165,8 +164,10 @@ fn answer_embed<const N: usize>(question: &Question<N>, correct: bool) -> Create
     };
     let header = format!("{} {:?}", question.answer(), question.difficulty());
     let body = format!(
-        "[**Definition ・ 意味**](https://jisho.org/search/{})",
+        "[**Definition ・ 意味**](https://jisho.org/search/{})\n{} {}",
         urlencoding::encode(question.answer()),
+        name,
+        emote::emote.wow
     );
 
     CreateEmbed::new()

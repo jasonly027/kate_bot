@@ -2,6 +2,7 @@ services:
   app:
     image: jasonly027/kate_bot
     environment:
+      - RUST_LOG=info,serenity=warn
       - ENV=prod
       - DISCORD_TOKEN_FILE=/run/secrets/kate_bot_discord_token
     secrets:

@@ -4,19 +4,22 @@ use poise::{
     serenity_prelude::{self as serenity},
 };
 use tracing::info;
+use tracing_subscriber::EnvFilter;
 
 use crate::models::net::{KateData, KateError};
 
+mod commands;
 mod config;
+mod message;
 mod models;
 mod modes;
-mod commands;
-mod message;
 mod util;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
     dotenv().ok();
 
     info!("Running in {} mode", config::environment());
