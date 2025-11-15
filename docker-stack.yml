@@ -1,6 +1,6 @@
 services:
   app:
-    image: jasonly027/kate_bot
+    image: jasonly027/kate_bot:0.2.0
     environment:
       - RUST_LOG=info,serenity=warn
       - ENV=prod

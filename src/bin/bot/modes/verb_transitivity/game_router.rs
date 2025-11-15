@@ -10,9 +10,11 @@ use crate::{
     models::{
         emote,
         net::{GameContext, GameMessage, Provider},
-        question::Question,
     },
-    modes::{ModeChoice, verb_transitivity::game_service::Service as GameService},
+    modes::{
+        ModeChoice,
+        verb_transitivity::game_service::{Question, Service as GameService},
+    },
     util::{Logging, Retry, RetryResult},
 };
 
@@ -136,12 +138,7 @@ fn parse_event(event: &ComponentInteraction, service: &GameService) -> Option<us
     Some(choice)
 }
 
-fn prompt_msg(
-    game_id: &str,
-    question: &Question<2>,
-    round: u32,
-    mode: ModeChoice,
-) -> CreateMessage {
+fn prompt_msg(game_id: &str, question: &Question, round: u32, mode: ModeChoice) -> CreateMessage {
     CreateMessage::new()
         .embed(prompt_embed(round, mode))
         .components(choice_buttons(game_id, round, question))
@@ -156,13 +153,13 @@ fn prompt_edit(game_id: &str, service: &GameService, name: &str, correct: bool) 
         .components(choice_buttons(game_id, round, question))
 }
 
-fn answer_embed<const N: usize>(name: &str, question: &Question<N>, correct: bool) -> CreateEmbed {
+fn answer_embed(name: &str, question: &Question, correct: bool) -> CreateEmbed {
     let thumbnail = if correct {
         emote::THUMBNAIL.correct
     } else {
         emote::random_insult().thumbnail_url
     };
-    let header = format!("{} {:?}", question.answer(), question.difficulty());
+    let header = format!("{} [{}] {:?}", question.answer(), question.kind(), question.difficulty());
     let body = format!(
         "[**Definition ・ 意味**](https://jisho.org/search/{})\n{} {}",
         urlencoding::encode(question.answer()),

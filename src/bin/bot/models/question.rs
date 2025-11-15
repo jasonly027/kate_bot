@@ -69,11 +69,10 @@ impl<const N: usize> Question<N> {
         &self.choices[self.answer_idx]
     }
 
-    pub fn difficulty(&self) -> &Vec<NLevel> {
+    pub fn difficulty(&self) -> &[NLevel] {
         &self.difficulty
     }
 
-    #[allow(dead_code)]
     pub fn answer_idx(&self) -> usize {
         self.answer_idx
     }

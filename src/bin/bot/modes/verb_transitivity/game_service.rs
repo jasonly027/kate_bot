@@ -1,4 +1,7 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Arc, OnceLock},
+};
 
 use kate_bot::dictionary::NLevel;
 use poise::serenity_prelude::UserId;
@@ -16,7 +19,38 @@ use crate::{
     modes::verb_transitivity::tverbs::{TVerbPooledPair, tverb_pooled_pairs},
 };
 
-type Question = question::Question<2>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum_macros::Display)]
+pub enum TVerbKind {
+    #[strum(to_string = "Intransitive")]
+    Intrans,
+    #[strum(to_string = "Transitive")]
+    Trans,
+}
+
+pub struct Question {
+    question: question::Question<2>,
+    kind: TVerbKind,
+}
+
+impl Question {
+    pub fn kind(&self) -> TVerbKind {
+        self.kind
+    }
+}
+
+impl Deref for Question {
+    type Target = question::Question<2>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.question
+    }
+}
+
+impl DerefMut for Question {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.question
+    }
+}
 
 static TVERBS: OnceLock<Vec<Arc<TVerbPooledPair>>> = OnceLock::new();
 
@@ -99,7 +133,8 @@ impl Service {
         };
 
         // Game is 50/50, so mark all choices guessed after the first try.
-        question.guess(question.answer_idx());
+        let answer_idx = question.answer_idx();
+        question.guess(answer_idx);
 
         let correct = choice == question.answer_idx();
         self.scoreboard.record(user, correct);
@@ -123,7 +158,11 @@ fn make_intrans(pair: &TVerbPooledPair) -> Question {
     let (choices, answer) = make_choices(pair, VerbType::Intrans);
     let difficulty = pair.intrans_entry().levels();
 
-    Question::new(prompt, choices, answer, difficulty).unwrap()
+    let question = question::Question::new(prompt, choices, answer, difficulty).unwrap();
+    Question {
+        question,
+        kind: TVerbKind::Intrans,
+    }
 }
 
 fn make_trans(pair: &TVerbPooledPair) -> Question {
@@ -136,7 +175,11 @@ fn make_trans(pair: &TVerbPooledPair) -> Question {
     let (choices, answer) = make_choices(pair, VerbType::Trans);
     let difficulty = pair.trans_entry().levels();
 
-    Question::new(prompt, choices, answer, difficulty).unwrap()
+    let question = question::Question::new(prompt, choices, answer, difficulty).unwrap();
+    Question {
+        question,
+        kind: TVerbKind::Trans,
+    }
 }
 
 fn make_choices(pair: &TVerbPooledPair, verbt: VerbType) -> ([String; 2], usize) {
@@ -156,7 +199,10 @@ fn make_choices(pair: &TVerbPooledPair, verbt: VerbType) -> ([String; 2], usize)
 
     let mut choices = [intrans, trans];
     choices.shuffle(&mut rng());
-    let answer_idx = choices.iter().position(|c| *c == answer).expect("answer is a clone");
+    let answer_idx = choices
+        .iter()
+        .position(|c| *c == answer)
+        .expect("answer is a clone");
 
     (choices, answer_idx)
 }
